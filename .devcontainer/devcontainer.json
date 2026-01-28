@@ -3,20 +3,50 @@
 {
 	"name": "Go",
 	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/go:2-1.25-trixie"
-
+	"image": "mcr.microsoft.com/devcontainers/go:2-1.25-trixie",
+	// "mounts": [
+	// 	"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+	// ],
+	// "postCreateCommand": "echo \"alias dockflow='go run ./cmd/dockflow/main.go'\" >> ~/.bashrc",
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {
+			"version": "latest",
+			"moby": false, // 关键：这里设为 false
+			"dockerDashComposeVersion": "v2"
+		}
+	},
+	"containerUser": "vscode",
+	"runArgs": [
+		"--privileged",
+		"--init"
+	],
+	"mounts": [
+		"source=/var/run/docker.sock,target=/var/run/docker-host.sock,type=bind"
+	],
+	"postStartCommand": [
+		"echo \"alias dockflow='go run ./cmd/dockflow/main.go'\" >> ~/.bashrc"
+	],
+	"postCreateCommand": [
+		// 确保 vscode 用户在 docker 组
+		"sudo usermod -aG docker vscode",
+		// 设置 docker.sock 的权限
+		"sudo chmod 666 /var/run/docker.sock 2>/dev/null || true",
+		// 创建 docker 组（如果不存在）
+		"sudo groupadd -f docker",
+		// 将当前用户添加到 docker 组
+		"sudo gpasswd -a $USER docker 2>/dev/null || sudo usermod -aG docker $USER",
+		// 设置 docker-host.sock 的软链接
+		"sudo ln -sf /var/run/docker-host.sock /var/run/docker.sock 2>/dev/null || true"
+	],
+	"remoteUser": "vscode"
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
-
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
-
 	// Use 'postCreateCommand' to run commands after the container is created.
 	// "postCreateCommand": "go version",
-
 	// Configure tool-specific properties.
 	// "customizations": {},
-
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"
 }
