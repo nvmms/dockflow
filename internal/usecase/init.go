@@ -4,6 +4,7 @@ import (
 	"dockflow/internal/config"
 	"dockflow/internal/service/docker"
 	"dockflow/internal/service/filesystem"
+	"dockflow/internal/service/traefik"
 )
 
 func Init() error {
@@ -21,6 +22,10 @@ func Init() error {
 	}
 
 	_ = cfg // 现在不用，先保证能读
+
+	if err := traefik.Init(); err != nil {
+		return err
+	}
 
 	// next: EnsureNetwork / EnsureTraefik
 	return nil

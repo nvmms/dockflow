@@ -48,8 +48,13 @@ func PrepareWorkspace() error {
 }
 
 func defaultConfig() []byte {
-	return []byte(
-		`version: v0.1
+	return []byte(`
+version: v0.1
+
+platform:
+  traefik:
+    acmeEmail: ""
+
 currentNamespace: default
 
 namespaces:
