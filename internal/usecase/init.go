@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"dockflow/internal/config"
 	"dockflow/internal/service/docker"
 	"dockflow/internal/service/filesystem"
 )
@@ -14,6 +15,13 @@ func Init() error {
 		return err
 	}
 
-	// next: EnsureTraefik
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+
+	_ = cfg // 现在不用，先保证能读
+
+	// next: EnsureNetwork / EnsureTraefik
 	return nil
 }
