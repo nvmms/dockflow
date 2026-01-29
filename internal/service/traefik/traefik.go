@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"dockflow/internal/config"
 	"dockflow/internal/service/docker"
-	"dockflow/internal/service/system"
 	"fmt"
 	"os"
 	"strings"
@@ -29,15 +28,15 @@ func Init() error {
 	if err != nil {
 		return err
 	}
-	print(email)
+	config.Save(cfg)
 
-	if err := system.CheckPorts(80, 443); err != nil {
-		return err
-	}
-
-	// if err := EnsureImage(TraefikImage); err != nil {
+	// if err := system.CheckPorts(80, 443); err != nil {
 	// 	return err
 	// }
+
+	if err := ensureNetwork(cfg); err != nil {
+		return err
+	}
 
 	if err := ensureContainer(cfg, email); err != nil {
 		return err
@@ -45,11 +44,6 @@ func Init() error {
 
 	return nil
 }
-
-// var (
-// 	ErrAcmeEmailMissing = errors.New("traefik acme email is missing")
-// 	ErrInvalidEmail     = errors.New("invalid email")
-// )
 
 func ensureAcmeEmail(cfg *config.Config) (string, error) {
 	email := strings.TrimSpace(cfg.Platform.Traefik.AcmeEmail)
@@ -80,6 +74,44 @@ func ensureAcmeEmail(cfg *config.Config) (string, error) {
 	}
 }
 
+func ensureNetwork(cfg *config.Config) (err error) {
+	networkId := strings.TrimSpace(cfg.Platform.Traefik.ContainerId)
+	if networkId == "" {
+		networkId, err = createTraefikNetwork(cfg)
+		if err != nil {
+			return err
+		}
+	} else {
+		isExist, err := docker.HasNetwork(networkId)
+		if err != nil {
+			return err
+		}
+		if !isExist {
+			networkId, err = createTraefikNetwork(cfg)
+		}
+	}
+	config.Save(cfg)
+	return nil
+}
+
+func createTraefikNetwork(cfg *config.Config) (string, error) {
+	opts := docker.NetworkCreateOptions{
+		Name:       TraefikNetwork,
+		Driver:     "bridge",
+		Subnet:     "10.0.0.0/8",
+		Gateway:    "10.0.0.1",
+		Attachable: true,
+	}
+	networkId, err := docker.CreateNetwork(opts)
+	if err != nil {
+		return "", err
+	}
+	cfg.Platform.Traefik.NetworkId = networkId
+	config.Save(cfg)
+
+	return networkId, nil
+}
+
 func ensureContainer(cfg *config.Config, acmeEmail string) (err error) {
 	containerId := strings.TrimSpace(cfg.Platform.Traefik.ContainerId)
 	if containerId == "" {
@@ -87,17 +119,31 @@ func ensureContainer(cfg *config.Config, acmeEmail string) (err error) {
 		if err != nil {
 			return err
 		}
-	}
 
-	isRun, err := docker.ContainerRunning(containerId)
-	if err != nil {
-		return err
-	}
-	if !isRun {
-		err = docker.StartContainer(containerId)
+		cfg.Platform.Traefik.ContainerId = containerId
+		config.Save(cfg)
+	} else {
+		isExist, err := docker.HasContainer(containerId)
 		if err != nil {
 			return err
 		}
+		if !isExist {
+			containerId, err = createTraefikContainer(acmeEmail)
+			cfg.Platform.Traefik.ContainerId = containerId
+			config.Save(cfg)
+		} else {
+			isRun, err := docker.ContainerRunning(containerId)
+			if err != nil {
+				return err
+			}
+			if !isRun {
+				err = docker.StartContainer(containerId)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
 	}
 
 	return nil
@@ -134,6 +180,10 @@ func createTraefikContainer(acmeEmail string) (containerId string, err error) {
 		"--certificatesresolvers.le.acme.httpchallenge.entrypoint=http",
 	)
 
-	docker.RunContainer(opt)
-	return "", nil
+	containerId, err = docker.RunContainer(opt)
+
+	if err != nil {
+		return containerId, err
+	}
+	return "", err
 }

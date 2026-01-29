@@ -62,3 +62,7 @@ namespaces:
     apps: {}
 `)
 }
+
+func DirExit() bool {
+	return false
+}

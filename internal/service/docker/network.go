@@ -1,45 +1,105 @@
 package docker
 
 import (
-	"context"
-
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/client"
 )
 
-type NetworkManager struct {
-	cli *client.Client
+/*
+=====================
+ Network 基础操作
+=====================
+*/
+
+// ListNetworks 列出网络
+func ListNetworks() ([]types.NetworkResource, error) {
+	return Client().NetworkList(
+		Ctx(),
+		types.NetworkListOptions{},
+	)
 }
 
-func NewNetworkManager(cli *client.Client) *NetworkManager {
-	return &NetworkManager{cli: cli}
+// InspectNetwork 获取网络详情
+func InspectNetwork(id string) (types.NetworkResource, error) {
+	return Client().NetworkInspect(
+		Ctx(),
+		id,
+		types.NetworkInspectOptions{},
+	)
 }
 
-/* ---------- 创建 ---------- */
-
-type CreateNetworkOptions struct {
-	Name     string
-	Driver   string
-	Internal bool
-	Labels   map[string]string
+// HasNetwork 判断网络是否存在（支持 name 或 id）
+func HasNetwork(networkID string) (bool, error) {
+	list, err := ListNetworks()
+	if err != nil {
+		return false, err
+	}
+	for _, item := range list {
+		if item.ID == networkID || item.Name == networkID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
-func (m *NetworkManager) Create(
-	ctx context.Context,
-	opt CreateNetworkOptions,
-) (string, error) {
+// RemoveNetwork 删除网络
+func RemoveNetwork(id string) error {
+	return Client().NetworkRemove(
+		Ctx(),
+		id,
+	)
+}
 
-	if opt.Driver == "" {
-		opt.Driver = "bridge"
+/*
+=====================
+ Network 创建
+=====================
+*/
+
+// NetworkCreateOptions 对应 docker network create
+type NetworkCreateOptions struct {
+	Name       string
+	Driver     string
+	Internal   bool
+	Attachable bool
+	Labels     map[string]string
+	Options    map[string]string
+	Subnet     string
+	Gateway    string
+	IPRange    string
+}
+
+// CreateNetwork 创建网络
+func CreateNetwork(opts NetworkCreateOptions) (string, error) {
+	if opts.Driver == "" {
+		opts.Driver = "bridge"
 	}
 
-	resp, err := m.cli.NetworkCreate(ctx, opt.Name, types.NetworkCreate{
-		Driver:   opt.Driver,
-		Internal: opt.Internal,
-		Labels:   opt.Labels,
-	})
+	var ipam *network.IPAM
+	if opts.Subnet != "" {
+		cfg := network.IPAMConfig{
+			Subnet:  opts.Subnet,
+			Gateway: opts.Gateway,
+			IPRange: opts.IPRange,
+		}
+		ipam = &network.IPAM{
+			Driver: "default",
+			Config: []network.IPAMConfig{cfg},
+		}
+	}
+
+	resp, err := Client().NetworkCreate(
+		Ctx(),
+		opts.Name,
+		types.NetworkCreate{
+			Driver:     opts.Driver,
+			Internal:   opts.Internal,
+			Attachable: opts.Attachable,
+			Labels:     opts.Labels,
+			Options:    opts.Options,
+			IPAM:       ipam,
+		},
+	)
 	if err != nil {
 		return "", err
 	}
@@ -47,37 +107,28 @@ func (m *NetworkManager) Create(
 	return resp.ID, nil
 }
 
-/* ---------- 管理 ---------- */
+/*
+=====================
+ 容器 ↔ 网络
+=====================
+*/
 
-func (m *NetworkManager) Connect(
-	ctx context.Context,
-	networkID string,
-	containerID string,
-) error {
-	return m.cli.NetworkConnect(ctx, networkID, containerID, &network.EndpointSettings{})
+// ConnectNetwork 将容器接入网络
+func ConnectNetwork(networkID, containerID string) error {
+	return Client().NetworkConnect(
+		Ctx(),
+		networkID,
+		containerID,
+		&network.EndpointSettings{},
+	)
 }
 
-func (m *NetworkManager) Disconnect(
-	ctx context.Context,
-	networkID string,
-	containerID string,
-) error {
-	return m.cli.NetworkDisconnect(ctx, networkID, containerID, false)
-}
-
-func (m *NetworkManager) List(
-	ctx context.Context,
-	f filters.Args,
-) ([]types.NetworkResource, error) {
-	return m.cli.NetworkList(ctx, types.NetworkListOptions{Filters: f})
-}
-
-func (m *NetworkManager) Prune(
-	ctx context.Context,
-) (types.NetworksPruneReport, error) {
-
-	f := filters.NewArgs()
-	f.Add("label", "dockflow.managed=true")
-
-	return m.cli.NetworksPrune(ctx, f)
+// DisconnectNetwork 将容器从网络移除
+func DisconnectNetwork(networkID, containerID string, force bool) error {
+	return Client().NetworkDisconnect(
+		Ctx(),
+		networkID,
+		containerID,
+		force,
+	)
 }
