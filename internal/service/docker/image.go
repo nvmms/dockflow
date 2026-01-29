@@ -5,6 +5,7 @@ import (
 	"os/exec"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/moby/term"
 )
@@ -27,6 +28,13 @@ func imageExists(image string) bool {
 }
 
 func PullImage(name string) error {
+	isExists, err := ImageExists(name)
+	if err != nil {
+		return err
+	}
+	if isExists {
+		return nil
+	}
 	ctx := Ctx()
 
 	rc, err := Client().ImagePull(ctx, name, types.ImagePullOptions{})
@@ -45,4 +53,19 @@ func PullImage(name string) error {
 		isTerm,
 		nil,
 	)
+}
+
+func ImageExists(name string) (bool, error) {
+	_, _, err := Client().ImageInspectWithRaw(Ctx(), name)
+	if err == nil {
+		return true, nil
+	}
+
+	// 镜像不存在
+	if client.IsErrNotFound(err) {
+		return false, nil
+	}
+
+	// 其他错误（Docker daemon 异常等）
+	return false, err
 }

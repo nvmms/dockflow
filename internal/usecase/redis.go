@@ -10,6 +10,7 @@ import (
 var (
 	ErrRedisNotFound = errors.New("redis not found")
 	ErrRedisNotExist = errors.New("redis not exist")
+	ErrRedisExist    = errors.New("redis name is exist")
 )
 
 func CreateRedis(redis domain.RedisSpec) error {
@@ -20,6 +21,11 @@ func CreateRedis(redis domain.RedisSpec) error {
 	}
 	if ns == nil {
 		return ErrNamespaceNotFound
+	}
+
+	currentRedis, currentRedisIndex := findRedisByName(ns, redis.Name)
+	if currentRedis != nil || currentRedisIndex > -1 {
+		return ErrRedisExist
 	}
 
 	redisImageName := "redis:" + redis.Version
@@ -52,7 +58,18 @@ func CreateRedis(redis domain.RedisSpec) error {
 		return err
 	}
 
+	inspect, err := docker.InspectContainer(containerId)
+	if err != nil {
+		return err
+	}
+
+	ips := []string{}
+	for _, net := range inspect.NetworkSettings.Networks {
+		ips = append(ips, net.IPAddress)
+	}
+
 	redis.ContainerId = containerId
+	redis.Ip = ips
 	ns.Redis = append(ns.Redis, redis)
 	filesystem.SaveNamespace(*ns)
 
@@ -110,6 +127,7 @@ func RemoveRedis(namespaceName string, redisContainerName string) error {
 	}
 
 	ns.Redis = remove(ns.Redis, index)
+	filesystem.SaveNamespace(*ns)
 
 	return nil
 

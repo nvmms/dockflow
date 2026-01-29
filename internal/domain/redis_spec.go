@@ -10,6 +10,7 @@ type RedisSpec struct {
 	AOF         bool
 	Eviction    string
 	ContainerId string
+	Ip          []string
 }
 
 func NewRedisSpace(

@@ -80,7 +80,6 @@ func SaveNamespace(ns domain.Namespace) error {
 	}
 
 	dir := namespaceDir(ns.Name)
-	print(dir)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
