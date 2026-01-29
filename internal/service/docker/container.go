@@ -234,6 +234,22 @@ func (o *ContainerRunOptions) WithNetwork(name string) {
 	o.EndpointsConfig[name] = &network.EndpointSettings{}
 }
 
+// 设置 CPU 核心数，例如 0.5 / 1 / 2
+func (o *ContainerRunOptions) WithCpu(cpu float64) {
+	if cpu <= 0 {
+		return
+	}
+	o.HostConfig.NanoCPUs = int64(cpu * 1e9)
+}
+
+// 设置内存大小（单位：GB，例如 0.5 / 1 / 2）
+func (o *ContainerRunOptions) WithMemory(memory float64) {
+	if memory <= 0 {
+		return
+	}
+	o.HostConfig.Memory = int64(memory * 1024 * 1024 * 1024)
+}
+
 func RunContainer(opts *ContainerRunOptions) (string, error) {
 	ctx := Ctx()
 
