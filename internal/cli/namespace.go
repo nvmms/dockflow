@@ -34,7 +34,6 @@ var nsCreateCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		fmt.Println("Namespace created:")
 		printNamespaces([]domain.Namespace{*ns})
 	},
 }

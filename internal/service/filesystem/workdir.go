@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	BaseDirName = ".dockflow"
+	BaseDirName      = ".dockflow"
+	NamespaceDirName = BaseDirName + "/namespace"
 )
 
 func PrepareWorkspace() error {

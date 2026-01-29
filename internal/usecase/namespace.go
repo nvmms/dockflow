@@ -17,11 +17,8 @@ var (
 func CreateNamespace(name string) (*domain.Namespace, error) {
 
 	namespace, err := filesystem.LoadNamespace(name)
-	if err != nil {
-		return nil, err
-	}
-	if namespace != nil {
-		return namespace, nil
+	if err == nil && namespace != nil {
+		return nil, ErrNamespaceExists
 	}
 
 	namespaces := filesystem.ListNamespaces()
@@ -50,7 +47,7 @@ func CreateNamespace(name string) (*domain.Namespace, error) {
 	}
 	ns.NetworkId = networkId
 
-	if err := filesystem.SaveNamespace(ns); err != nil {
+	if err := filesystem.SaveNamespace(*ns); err != nil {
 		return nil, err
 	}
 
