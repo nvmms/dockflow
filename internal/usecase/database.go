@@ -5,6 +5,7 @@ import (
 	"dockflow/internal/service/docker"
 	"dockflow/internal/service/filesystem"
 	"errors"
+	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/samber/lo"
@@ -47,10 +48,10 @@ func Createdatabase(database domain.DatabaseSpec) error {
 	opts.WithCpu(database.CPU)
 	opts.WithMemory(database.Memory)
 
-	opts.WithEnv("MYSQL_ROOT_PASSWORD", "123456")
-	opts.WithEnv("MYSQL_DATABASE", database.DbName)
-	opts.WithEnv("MYSQL_USER", database.Username)
-	opts.WithEnv("MYSQL_PASSWORD", database.Password)
+	env := detectDatabaseType(database)
+	for key, value := range env {
+		opts.WithEnv(key, value)
+	}
 
 	containerId, err := docker.RunContainer(opts)
 	if err != nil {
@@ -134,4 +135,39 @@ func Removedatabase(namespaceName string, databaseContainerName string) error {
 
 	return nil
 
+}
+
+func detectDatabaseType(database domain.DatabaseSpec) (env map[string]string) {
+	name := strings.ToLower(database.DbType)
+
+	if idx := strings.LastIndex(name, "/"); idx != -1 {
+		name = name[idx+1:]
+	}
+	if idx := strings.Index(name, ":"); idx != -1 {
+		name = name[:idx]
+	}
+
+	switch name {
+	case "mysql":
+		return createMysqlEnv(database)
+	case "postgres", "postgresql":
+		return createPostgreSQLEnv(database)
+	}
+	return nil
+}
+
+func createMysqlEnv(database domain.DatabaseSpec) (env map[string]string) {
+	env = make(map[string]string)
+	env["MYSQL_DATABASE"] = database.DbName
+	env["MYSQL_USER"] = database.Username
+	env["MYSQL_PASSWORD"] = database.Password
+	return env
+}
+
+func createPostgreSQLEnv(database domain.DatabaseSpec) (env map[string]string) {
+	env = make(map[string]string)
+	env["POSTGRES_DB"] = database.DbName
+	env["POSTGRES_USER"] = database.Username
+	env["POSTGRES_PASSWORD"] = database.Password
+	return env
 }
