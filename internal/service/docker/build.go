@@ -6,22 +6,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/docker/docker/api/types"
 )
 
-func BuildWithNpm(path string, tag string) {
-
-	buildCtx, err := tarDirectory(path)
-	if err != nil {
-		panic(err)
-	}
-
-	Client().ImageBuild(Ctx(), buildCtx, types.ImageBuildOptions{
-		Tags:       []string{"demo:latest"},
-		Dockerfile: "Dockerfile",
-		Remove:     true,
-	})
+func BuildWithNpmService(path string, tag string) {
+	// TODO: 打包npm程序，自己提供程序访问，
+}
+func BuildWithNpmWeb(path string, tag string) {
+	// TODO: 打包npm 前端应用，需要配合nginx\apache，提供访问
 }
 
 func BuildWithJava(path string, tag string) {}
