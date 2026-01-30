@@ -15,6 +15,7 @@ var (
 	ErrdatabaseNotFound = errors.New("database not found")
 	ErrdatabaseNotExist = errors.New("database not exist")
 	ErrdatabaseExist    = errors.New("database name is exist")
+	ErrdatabaseNotSuppert = errors.New("database not suppert")
 )
 
 func Createdatabase(database domain.DatabaseSpec) error {
@@ -35,6 +36,20 @@ func Createdatabase(database domain.DatabaseSpec) error {
 		return ErrdatabaseExist
 	}
 
+	name := strings.ToLower(database.DbType)
+
+	if idx := strings.LastIndex(name, "/"); idx != -1 {
+		name = name[idx+1:]
+	}
+	if idx := strings.Index(name, ":"); idx != -1 {
+		name = name[:idx]
+	}
+	switch name {
+	case "mysql","postgres", "postgresql":
+	default:
+		return ErrdatabaseNotSuppert
+	}
+
 	databaseImageName := database.DbType
 	if err := docker.PullImage(databaseImageName); err != nil {
 		return err
@@ -48,7 +63,10 @@ func Createdatabase(database domain.DatabaseSpec) error {
 	opts.WithCpu(database.CPU)
 	opts.WithMemory(database.Memory)
 
-	env := detectDatabaseType(database)
+	env ,err:= detectDatabaseType(database)
+	if err != nil{
+		return err
+	}
 	for key, value := range env {
 		opts.WithEnv(key, value)
 	}
@@ -137,7 +155,7 @@ func Removedatabase(namespaceName string, databaseContainerName string) error {
 
 }
 
-func detectDatabaseType(database domain.DatabaseSpec) (env map[string]string) {
+func detectDatabaseType(database domain.DatabaseSpec) (env map[string]string,err error) {
 	name := strings.ToLower(database.DbType)
 
 	if idx := strings.LastIndex(name, "/"); idx != -1 {
@@ -149,11 +167,12 @@ func detectDatabaseType(database domain.DatabaseSpec) (env map[string]string) {
 
 	switch name {
 	case "mysql":
-		return createMysqlEnv(database)
+		return createMysqlEnv(database),nil
 	case "postgres", "postgresql":
-		return createPostgreSQLEnv(database)
+		return createPostgresEnv(database),nil
+	default:
+		return nil ,ErrdatabaseNotSuppert
 	}
-	return nil
 }
 
 func createMysqlEnv(database domain.DatabaseSpec) (env map[string]string) {
@@ -164,7 +183,7 @@ func createMysqlEnv(database domain.DatabaseSpec) (env map[string]string) {
 	return env
 }
 
-func createPostgreSQLEnv(database domain.DatabaseSpec) (env map[string]string) {
+func createPostgresEnv(database domain.DatabaseSpec) (env map[string]string) {
 	env = make(map[string]string)
 	env["POSTGRES_DB"] = database.DbName
 	env["POSTGRES_USER"] = database.Username

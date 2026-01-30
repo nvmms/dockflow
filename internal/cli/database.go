@@ -4,6 +4,7 @@ import (
 	"dockflow/internal/domain"
 	"dockflow/internal/usecase"
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 )
@@ -91,14 +92,13 @@ var databaseListCmd = &cobra.Command{
 	Aliases: []string{"ls"},
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// namespace := args[0]
-		// redisList, err := usecase.ListRedis(namespace)
-		// if err != nil {
-		// 	printError(err)
-		// }
-		// for _, redis := range redisList {
-		// 	print(redis.Name)
-		// }
+		namespace := args[0]
+		dbList, err := usecase.Listdatabase(namespace)
+		if err != nil {
+			printError(err)
+		}
+		printDatabaseList(dbList)
+
 	},
 }
 
@@ -108,11 +108,24 @@ var databaseRemoveCmd = &cobra.Command{
 	Aliases: []string{"rm"},
 	Args:    cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		// namespace := args[0]
-		// redisName := args[1]
-		// err := usecase.RemoveRedis(namespace, redisName)
-		// if err != nil {
-		// 	printError(err)
-		// }
+		namespace := args[0]
+		redisName := args[1]
+		err := usecase.Removedatabase(namespace, redisName)
+		if err != nil {
+			printError(err)
+		}
 	},
+}
+
+func printDatabaseList(list []domain.DatabaseSpec) {
+	fmt.Printf("%-12s %-8s %-8s %-10s\n", "NAME", "TYPE", "VERSION", "STATUS")
+	fmt.Println("----------------------------------------")
+
+	for _, db := range list {
+		fmt.Printf(
+			"%-12s %-8s %-8s %-10s\n",
+			db.Name,
+			db.DbType, // redis / mysql / pg
+		)
+	}
 }

@@ -3,6 +3,7 @@ package cli
 import (
 	"dockflow/internal/domain"
 	"dockflow/internal/usecase"
+	"fmt"
 
 	"github.com/spf13/cobra"
 )
@@ -59,9 +60,7 @@ var redisListCmd = &cobra.Command{
 		if err != nil {
 			printError(err)
 		}
-		for _, redis := range redisList {
-			print(redis.Name)
-		}
+		printRedisList(redisList)
 	},
 }
 
@@ -78,4 +77,17 @@ var redisRemoveCmd = &cobra.Command{
 			printError(err)
 		}
 	},
+}
+
+func printRedisList(list []domain.RedisSpec) {
+	fmt.Printf("%-12s %-8s %-8s %-10s\n", "NAME", "TYPE", "VERSION", "STATUS")
+	fmt.Println("----------------------------------------")
+
+	for _, db := range list {
+		fmt.Printf(
+			"%-12s %-8s %-8s %-10s\n",
+			db.Name,
+			db.Version, // redis / mysql / pg
+		)
+	}
 }
