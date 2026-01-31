@@ -121,7 +121,14 @@ func DeployApp(opt DeployAppOptions) error {
 	for _, app := range namespace.App {
 
 		if app.Name == opt.Name {
-			err := service.DeployApp(app, &opt.Branch, &opt.Commit, &opt.Tag)
+			deploy, err := service.NewAppDeployer(&app)
+			if err != nil {
+				return err
+			}
+			err = deploy.Deploy(&opt.Branch, &opt.Commit, &opt.Tag)
+			if err != nil {
+				return err
+			}
 			return err
 		}
 	}
