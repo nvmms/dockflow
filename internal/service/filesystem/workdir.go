@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	BaseDirName      = ".dockflow"
-	NamespaceDirName = BaseDirName + "/namespace"
+	BaseDirName         = "/home/vscode/.dockflow"
+	NamespaceDirName    = BaseDirName + "/namespace"
+	BuildDockerfilePath = BaseDirName + "/build-templates/Dockerfile."
 )
 
 func PrepareWorkspace() error {
@@ -64,6 +65,13 @@ namespaces:
 `)
 }
 
-func DirExit() bool {
-	return false
+func DirExists(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if err == nil {
+		return info.IsDir(), nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err // 其他错误（如权限）
 }

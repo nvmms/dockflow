@@ -64,9 +64,9 @@ func InspectNamespace(
 
 	ns, err := filesystem.LoadNamespace(name)
 	if err != nil {
-		if filesystem.DirExit() {
-			return nil, ErrNamespaceNotFound
-		}
+		// if filesystem.DirExists() {
+		// 	return nil, ErrNamespaceNotFound
+		// }
 		return nil, err
 	}
 	return ns, nil

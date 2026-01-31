@@ -3,63 +3,129 @@ package docker
 import (
 	"archive/tar"
 	"bytes"
+	"dockflow/internal/service/filesystem"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/docker/docker/api/types"
+	"github.com/otiai10/copy"
+	"github.com/samber/lo"
 )
 
-func BuildWithNpmService(path string, tag string) {
-	// TODO: 打包npm程序，自己提供程序访问，
-}
-func BuildWithNpmWeb(path string, tag string) {
-	// TODO: 打包npm 前端应用，需要配合nginx\apache，提供访问
-}
+var BuildTypeEnum = []string{"go", "java", "node-page", "node-service", "php", "python"}
 
-func BuildWithJava(path string, tag string) {}
+var (
+	ErrorBuildTypeNotExist = errors.New("build type not exist")
+	ErrorBuildPathNotExist = errors.New("build path not exist")
+)
 
-func BuildWithPhp(path string, tag string) {}
-
-func BuildWithPython(path string, tag string) {}
-
-func BuildWithGo(path string, tag string) {}
-
-func tarDirectory(dir string) (io.Reader, error) {
+func TarBuildContext(dir string) (io.Reader, error) {
 	buf := new(bytes.Buffer)
 	tw := tar.NewWriter(buf)
 
-	err := filepath.Walk(dir, func(file string, fi os.FileInfo, err error) error {
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		header, err := tar.FileInfoHeader(fi, "")
+		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
 			return err
 		}
-		header.Name = file
+
+		relPath, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		header.Name = relPath
 
 		if err := tw.WriteHeader(header); err != nil {
 			return err
 		}
 
-		if fi.IsDir() {
-			return nil
-		}
+		if info.Mode().IsRegular() {
+			file, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
 
-		f, err := os.Open(file)
-		if err != nil {
-			return err
+			if _, err := io.Copy(tw, file); err != nil {
+				return err
+			}
 		}
-		defer f.Close()
-
-		_, err = io.Copy(tw, f)
-		return err
+		return nil
 	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	tw.Close()
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+
 	return buf, nil
+}
+
+func Build(path string, tag string, buildtype string, args map[string]*string) error {
+	if !lo.Contains(BuildTypeEnum, buildtype) {
+		return ErrorBuildTypeNotExist
+	}
+
+	isExist, err := filesystem.DirExists(path)
+	if err != nil {
+		return err
+	}
+
+	if !isExist {
+		return ErrorBuildPathNotExist
+	}
+
+	err = copy.Copy(filesystem.BuildDockerfilePath+buildtype, path+"/Dockerfile."+buildtype)
+	if err != nil {
+		print("copy dockerfile err: \n")
+		return err
+	}
+
+	tarReader, err := TarBuildContext(path)
+	if err != nil {
+		return err
+	}
+
+	opts := types.ImageBuildOptions{
+		Tags:       []string{tag},
+		Dockerfile: "Dockerfile." + buildtype,
+		Remove:     true,
+		BuildArgs:  args,
+	}
+
+	resp, err := Client().ImageBuild(Ctx(), tarReader, opts)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	decoder := json.NewDecoder(resp.Body)
+	for {
+		var msg map[string]interface{}
+		if err := decoder.Decode(&msg); err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+
+		if v, ok := msg["stream"]; ok {
+			fmt.Print(v)
+		}
+		if v, ok := msg["error"]; ok {
+			return fmt.Errorf("%v", v)
+		}
+	}
+
+	return nil
 }

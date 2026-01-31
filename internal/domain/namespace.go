@@ -11,5 +11,5 @@ type Namespace struct {
 	CreatedAt time.Time      `json:"created_at"`
 	Redis     []RedisSpec    `json:"redis"`
 	Database  []DatabaseSpec `json:"database"`
-	Service   []ServiceSpec  `json:"service"`
+	App       []AppSpec      `json:"app"`
 }
