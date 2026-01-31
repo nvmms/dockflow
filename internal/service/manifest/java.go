@@ -6,18 +6,6 @@ import (
 	"regexp"
 )
 
-type Maven struct {
-	JAVA_VERSION  string
-	MAVEN_VERSION string
-	TARGET_NAME   string
-}
-
-type Gradle struct {
-	JAVA_VERSION   string
-	GRADLE_VERSION string
-	TARGET_NAME    string
-}
-
 type pom struct {
 	XMLName xml.Name `xml:"project"`
 
@@ -87,6 +75,12 @@ func ParseJavaMaven(path string) (map[string]*string, error) {
 		"MAVEN_VERSION": &mavenVersion,
 		"TARGET_NAME":   &targetName,
 	}, nil
+}
+
+type Gradle struct {
+	JAVA_VERSION   string
+	GRADLE_VERSION string
+	TARGET_NAME    string
 }
 
 func ParseJavaGradle(page string) (Gradle, error) {
