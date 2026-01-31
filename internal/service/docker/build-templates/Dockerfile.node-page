@@ -1,0 +1,36 @@
+# =========================
+# Build Args
+# =========================
+ARG NODE_VERSION=20
+ARG BUILD_CMD=build
+ARG DIST_DIR=dist
+
+# =========================
+# Builder
+# =========================
+FROM node:${NODE_VERSION}-alpine AS builder
+
+WORKDIR /app
+
+COPY package.json ./
+
+RUN npm install
+
+COPY ./ ./
+
+RUN ${BUILD_CMD}
+
+# =========================
+# Runtime
+# =========================
+FROM nginx:alpine
+
+WORKDIR /usr/share/nginx/html
+
+RUN rm -rf ./*
+
+COPY --from=builder /app/${DIST_DIR} ./
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

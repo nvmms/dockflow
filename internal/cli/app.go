@@ -4,8 +4,10 @@ import (
 	"dockflow/internal/domain"
 	"dockflow/internal/service/docker"
 	"dockflow/internal/usecase"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/samber/lo"
@@ -21,6 +23,7 @@ func init() {
 	appCreateCmd.Flags().String("repo", "", "Git repository url")
 	appCreateCmd.Flags().String("token", "", "Git access token")
 	appCreateCmd.Flags().String("platform", "", "deploy platform")
+	appCreateCmd.Flags().String("build-args", "", "build args for platform, json {\"NODE_VERSION\":\"20\",\"BUILD_CMD\":\"npm run build\",\"DIST_DIR\":\"./dist1\"}")
 	appCreateCmd.Flags().String(
 		"trigger-type",
 		"branch",
@@ -82,11 +85,21 @@ var appCreateCmd = &cobra.Command{
 		urlFlags, _ := cmd.Flags().GetStringArray("url")
 
 		platform, _ := cmd.Flags().GetString("platform")
+		fmt.Printf("%s", platform)
+		os.Exit(0)
+
 		if platform == "" {
 			return fmt.Errorf("platform is required, %s", docker.BuildTypeEnum)
 		}
 		if !lo.Contains(docker.BuildTypeEnum, platform) {
 			return fmt.Errorf("platform is not support, support list: %s", docker.BuildTypeEnum)
+		}
+
+		buildArgsStr, _ := cmd.Flags().GetString("build-args")
+		var buildArgsMap map[string]*string
+		err := json.Unmarshal([]byte(buildArgsStr), &buildArgsMap)
+		if err != nil {
+			return fmt.Errorf("build args must be json")
 		}
 
 		// ---------- basic validate ----------
@@ -152,9 +165,11 @@ var appCreateCmd = &cobra.Command{
 			Trigger:   trigger,
 			Envs:      envs,
 			URLs:      urls,
+			BuildArg:  buildArgsMap,
+			Platform:  platform,
 		}
 
-		err := usecase.CreateApp(spec)
+		err = usecase.CreateApp(spec)
 		if err != nil {
 			return err
 		}
@@ -174,7 +189,9 @@ var appListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		print(len(apps))
+		for _, app := range apps {
+			fmt.Printf("%s\n", app.Name)
+		}
 		return nil
 	},
 }

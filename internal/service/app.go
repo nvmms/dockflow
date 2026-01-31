@@ -131,12 +131,25 @@ func (d *AppDeployer) buildApp(version string) (string, error) {
 	repoPath := filesystem.NamespaceDirName + "/" +
 		d.app.Namespace + "/repo/" + d.app.Name
 
-	ports := collectPorts(d.app.URLs)
-
-	args, err := manifest.ParseJavaMaven(repoPath)
+	var args map[string]*string
+	var err error
+	switch d.app.Platform {
+	case "java":
+		args, err = manifest.ParseJavaMaven(repoPath)
+	case "node-page":
+		args = d.app.BuildArg
+	case "go":
+		args = map[string]*string{}
+	case "python":
+		args = map[string]*string{}
+	default:
+		err = fmt.Errorf("build type [%s] not support", d.app.Platform)
+	}
 	if err != nil {
 		return "", err
 	}
+
+	ports := collectPorts(d.app.URLs)
 	args["APP_PORT"] = &ports
 
 	image := fmt.Sprintf("%s:%s", d.app.Name, version)
