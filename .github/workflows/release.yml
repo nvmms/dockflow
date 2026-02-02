@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*'  # 监听版本号标签（如 v1.0.0），触发发布
   workflow_dispatch:  # 手动触发
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
 
 jobs:
   build:
@@ -21,6 +25,16 @@ jobs:
         with:
           go-version: '1.25'
 
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          fi
+
       # 安装构建依赖（例如 fpm）
       - name: Install dependencies
         run: |
@@ -31,7 +45,10 @@ jobs:
       # 构建 Go 项目
       - name: Build Go binary
         run: |
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ./pkg/usr/bin ./cmd/dockflow
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+            -ldflags="-X main.Version=${{ steps.version.outputs.VERSION }}" \
+            -o ./pkg/usr/bin/dockflow \
+            ./cmd/dockflow
 
       # 创建 .deb 包
       - name: Build .deb package
@@ -50,13 +67,12 @@ jobs:
             usr etc
 
       # 上传 .deb 包到 GitHub Release
-      - name: Upload .deb package to GitHub Release
-        uses: ghprb-robot/upload-release-asset@v1
+      - name: Upload to GitHub Release
+        if: github.event_name != 'workflow_dispatch' && github.event.release
+        uses: softprops/action-gh-release@v1
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./dockflow_${{ github.ref_name }}_amd64.deb
-          asset_name: dockflow_${{ github.ref_name }}_amd64.deb
-          asset_content_type: application/vnd.debian.binary-package
+          files: dockflow_${{ steps.version.outputs.VERSION }}_amd64.deb
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
