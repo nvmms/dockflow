@@ -53,11 +53,9 @@ jobs:
       # 创建 .deb 包
       - name: Build .deb package
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-
           fpm -s dir -t deb \
             -n dockflow \
-            -v "${VERSION}" \
+            -v "${{ steps.version.outputs.VERSION }}" \
             --architecture amd64 \
             --deb-priority optional \
             --deb-compression xz \
