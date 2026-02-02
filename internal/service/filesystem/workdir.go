@@ -7,8 +7,11 @@ import (
 )
 
 const (
-	CfgPath = "/etc/dockflow/dockflow.yaml"
-	// CfgPath             = "/home/heeig/dockflow/pkg/etc/dockflow/dockflow.yaml"
+	CfgDir              = "/etc/dockflow/"
+	CfgPath             = CfgDir + "dockflow.yaml"
+	CfgScriptDir        = CfgDir + "script/"
+	MySqlInitScript     = CfgScriptDir + "mysql_init_script.sql"
+	PgSqlInitScript     = CfgScriptDir + "pgsql_init_script.sql"
 	BaseDirName         = "/var/lib/dockflow"
 	NamespaceDirName    = BaseDirName + "/namespace"
 	BuildDockerfilePath = BaseDirName + "/build-templates/Dockerfile."

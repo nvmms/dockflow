@@ -4,7 +4,9 @@ import (
 	"dockflow/internal/domain"
 	"dockflow/internal/service/docker"
 	"dockflow/internal/service/filesystem"
+	"dockflow/internal/util"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
@@ -12,14 +14,13 @@ import (
 )
 
 var (
-	ErrdatabaseNotFound = errors.New("database not found")
-	ErrdatabaseNotExist = errors.New("database not exist")
-	ErrdatabaseExist    = errors.New("database name is exist")
+	ErrdatabaseNotFound   = errors.New("database not found")
+	ErrdatabaseNotExist   = errors.New("database not exist")
+	ErrdatabaseExist      = errors.New("database name is exist")
 	ErrdatabaseNotSuppert = errors.New("database not suppert")
 )
 
 func Createdatabase(database domain.DatabaseSpec) error {
-
 	ns, err := filesystem.LoadNamespace(database.Namespace)
 	if err != nil {
 		return err
@@ -45,7 +46,7 @@ func Createdatabase(database domain.DatabaseSpec) error {
 		name = name[:idx]
 	}
 	switch name {
-	case "mysql","postgres", "postgresql":
+	case "mysql", "postgres", "postgresql":
 	default:
 		return ErrdatabaseNotSuppert
 	}
@@ -56,19 +57,14 @@ func Createdatabase(database domain.DatabaseSpec) error {
 	}
 
 	opts := docker.NewRunOptions(database.Name, databaseImageName)
-
 	opts.WithRestart(container.RestartPolicyOnFailure)
-
 	opts.WithNetwork(ns.Network)
 	opts.WithCpu(database.CPU)
 	opts.WithMemory(database.Memory)
 
-	env ,err:= detectDatabaseType(database)
-	if err != nil{
+	err = detectDatabaseType(database, opts)
+	if err != nil {
 		return err
-	}
-	for key, value := range env {
-		opts.WithEnv(key, value)
 	}
 
 	containerId, err := docker.RunContainer(opts)
@@ -155,7 +151,7 @@ func Removedatabase(namespaceName string, databaseContainerName string) error {
 
 }
 
-func detectDatabaseType(database domain.DatabaseSpec) (env map[string]string,err error) {
+func detectDatabaseType(database domain.DatabaseSpec, opt *docker.ContainerRunOptions) (err error) {
 	name := strings.ToLower(database.DbType)
 
 	if idx := strings.LastIndex(name, "/"); idx != -1 {
@@ -167,26 +163,33 @@ func detectDatabaseType(database domain.DatabaseSpec) (env map[string]string,err
 
 	switch name {
 	case "mysql":
-		return createMysqlEnv(database),nil
+		opt.WithVolume(filesystem.MySqlInitScript, "/docker-entrypoint-initdb.d/001-dockflow.sql", "ro")
+		opt.WithVolume(fmt.Sprintf("dockflow-dbvolume-%s-%s-%s", database.Namespace, database.Name, database.DbName), "/var/lib/mysql")
+
+		opt.WithEnv("MYSQL_ROOT_PASSWORD", "dockflow-init-only")
+		opt.WithEnv("MYSQL_DATABASE", database.DbName)
+		opt.WithEnv("MYSQL_USER", database.Username)
+		opt.WithEnv("MYSQL_PASSWORD", database.Password)
+
+		if database.Remote {
+			hostPort := util.GenerateRandomPort()
+			opt.WithPort(hostPort, 3306)
+		}
+
 	case "postgres", "postgresql":
-		return createPostgresEnv(database),nil
+		opt.WithVolume(filesystem.PgSqlInitScript, "/docker-entrypoint-initdb.d/001-dockflow.sql", "ro")
+		opt.WithVolume(fmt.Sprintf("dockflow-dbvolume-%s-%s-%s", database.Namespace, database.Name, database.DbName), "/var/lib/postgresql")
+
+		opt.WithEnv("POSTGRES_DB", database.DbName)
+		opt.WithEnv("POSTGRES_USER", database.Username)
+		opt.WithEnv("POSTGRES_PASSWORD", database.Password)
+
+		if database.Remote {
+			hostPort := util.GenerateRandomPort()
+			opt.WithPort(hostPort, 3306)
+		}
 	default:
-		return nil ,ErrdatabaseNotSuppert
+		return ErrdatabaseNotSuppert
 	}
-}
-
-func createMysqlEnv(database domain.DatabaseSpec) (env map[string]string) {
-	env = make(map[string]string)
-	env["MYSQL_DATABASE"] = database.DbName
-	env["MYSQL_USER"] = database.Username
-	env["MYSQL_PASSWORD"] = database.Password
-	return env
-}
-
-func createPostgresEnv(database domain.DatabaseSpec) (env map[string]string) {
-	env = make(map[string]string)
-	env["POSTGRES_DB"] = database.DbName
-	env["POSTGRES_USER"] = database.Username
-	env["POSTGRES_PASSWORD"] = database.Password
-	return env
+	return nil
 }

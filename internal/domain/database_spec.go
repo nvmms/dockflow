@@ -11,6 +11,7 @@ type DatabaseSpec struct {
 	DbType      string
 	ContainerId string
 	Ip          []string
+	Remote      bool
 }
 
 // func NewDatabaseSpec(

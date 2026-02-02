@@ -15,10 +15,12 @@ func init() {
 
 	databaseCreateCmd.Flags().Float64("cpu", 1, "CPU limit (cores)")
 	databaseCreateCmd.Flags().Float64("memory", 2, "Memory limit:GB")
-	databaseCreateCmd.Flags().String("dbtype", "mysql:5.7", "Database type mysql pgsql support")
 	databaseCreateCmd.Flags().String("username", "", "")
 	databaseCreateCmd.Flags().String("password", "", "")
 	databaseCreateCmd.Flags().String("dbname", "", "")
+	databaseCreateCmd.Flags().String("dbtype", "mysql:5.7", "Database type mysql pgsql support")
+	databaseCreateCmd.Flags().Bool("remote", false, "open remote access, use random port bind mysql 3306")
+
 }
 
 var databaseCmd = &cobra.Command{
@@ -58,6 +60,7 @@ var databaseCreateCmd = &cobra.Command{
 			return
 		}
 		dbtype, _ := cmd.Flags().GetString("dbtype")
+		remote, _ := cmd.Flags().GetBool("remote")
 
 		database := domain.DatabaseSpec{
 			Namespace: namespace,
@@ -68,6 +71,7 @@ var databaseCreateCmd = &cobra.Command{
 			Password:  password,
 			DbName:    dbname,
 			DbType:    dbtype,
+			Remote:    remote,
 		}
 		err := usecase.Createdatabase(database)
 		if err != nil {
@@ -103,7 +107,7 @@ var databaseListCmd = &cobra.Command{
 }
 
 var databaseRemoveCmd = &cobra.Command{
-	Use:     "Remove <namespace> <name>",
+	Use:     "remove <namespace> <name>",
 	Short:   "Remove <namespace> database",
 	Aliases: []string{"rm"},
 	Args:    cobra.ExactArgs(2),

@@ -9,6 +9,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
 
@@ -194,21 +195,35 @@ func (o *ContainerRunOptions) WithPort(hostPort int, containerPort int) {
 
 // WithVolume 绑定卷 /host:/container[:options]
 func (o *ContainerRunOptions) WithVolume(
-	hostVolume string,
-	containerVolume string,
+	source string,
+	target string,
 	options ...string,
 ) {
-	if o.Binds == nil {
-		o.Binds = []string{}
+	// 1️⃣ bind mount（宿主机路径）
+	if strings.HasPrefix(source, "/") {
+		bind := source + ":" + target
+		if len(options) > 0 {
+			bind += ":" + strings.Join(options, ",")
+		}
+		o.Binds = append(o.Binds, bind)
+		return
 	}
 
-	bind := hostVolume + ":" + containerVolume
-
-	if len(options) > 0 {
-		bind = bind + ":" + strings.Join(options, ",")
+	// 2️⃣ volume mount（Docker volume）
+	m := mount.Mount{
+		Type:   mount.TypeVolume,
+		Source: source,
+		Target: target,
 	}
 
-	o.Binds = append(o.Binds, bind)
+	// 只解析最常见参数，避免复杂化
+	for _, opt := range options {
+		if opt == "ro" {
+			m.ReadOnly = true
+		}
+	}
+
+	o.Mounts = append(o.Mounts, m)
 }
 
 // WithCommand 设置容器启动命令（等价 docker run IMAGE CMD...）
