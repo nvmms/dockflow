@@ -7,21 +7,14 @@ import (
 )
 
 const (
-	BaseDirName         = "/home/vscode/.dockflow"
+	BaseDirName         = "/var/lib/dockflow"
 	NamespaceDirName    = BaseDirName + "/namespace"
 	BuildDockerfilePath = BaseDirName + "/build-templates/Dockerfile."
 )
 
 func PrepareWorkspace() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-
-	baseDir := filepath.Join(home, BaseDirName)
-
 	// 1. create base dir
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
+	if err := os.MkdirAll(BaseDirName, 0755); err != nil {
 		return err
 	}
 
@@ -33,13 +26,13 @@ func PrepareWorkspace() error {
 	}
 
 	for _, d := range dirs {
-		if err := os.MkdirAll(filepath.Join(baseDir, d), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(BaseDirName, d), 0755); err != nil {
 			return err
 		}
 	}
 
 	// 3. dockflow.yaml
-	cfgPath := filepath.Join(baseDir, "dockflow.yaml")
+	cfgPath := filepath.Join(BaseDirName, "dockflow.yaml")
 	if _, err := os.Stat(cfgPath); errors.Is(err, os.ErrNotExist) {
 		if err := os.WriteFile(cfgPath, defaultConfig(), 0644); err != nil {
 			return err
