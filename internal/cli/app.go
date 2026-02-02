@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -81,17 +80,6 @@ var appCreateCmd = &cobra.Command{
 
 		envFlags, _ := cmd.Flags().GetStringArray("env")
 		urlFlags, _ := cmd.Flags().GetStringArray("url")
-
-		platform, _ := cmd.Flags().GetString("platform")
-		fmt.Printf("%s", platform)
-		os.Exit(0)
-
-		// if platform == "" {
-		// 	return fmt.Errorf("platform is required, %s", docker.BuildTypeEnum)
-		// }
-		// if !lo.Contains(docker.BuildTypeEnum, platform) {
-		// 	return fmt.Errorf("platform is not support, support list: %s", docker.BuildTypeEnum)
-		// }
 
 		buildArgsStr, _ := cmd.Flags().GetString("build-args")
 		var buildArgsMap map[string]*string
