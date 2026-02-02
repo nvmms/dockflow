@@ -219,25 +219,28 @@ func (d *AppDeployer) runApp(image, version string) (string, error) {
 
 	opts.WithNetwork(traefik.TraefikNetwork)
 	opts.WithNetwork(d.ns.Network)
+	opts.WithLabel("dockflow.namespace", d.ns.Name)
+	opts.WithLabel("dockflow.name", d.app.Name)
 
 	// ---------- traefik ----------
-	opts.WithLabel("traefik.enable", "true")
-	opts.WithLabel("traefik.docker.network", traefik.TraefikNetwork)
+	// opts.WithLabel("traefik.enable", "true")
+	// opts.WithLabel("traefik.docker.network", traefik.TraefikNetwork)
+	// opts.WithLabel("traefik.http.routers."+service+".rule", rule)
 
-	for i, url := range d.app.URLs {
-		service := fmt.Sprintf("%s_%s_%d", d.app.Name, version, i)
-		rule := buildTraefikRule(url.Host, version)
+	// for i, url := range d.app.URLs {
+	// 	service := fmt.Sprintf("%s_%s_%d", d.app.Name, version, i)
+	// 	rule := buildTraefikRule(url.Host, version)
 
-		opts.WithLabel("traefik.http.routers."+service+".rule", rule)
-		opts.WithLabel("traefik.http.routers."+service+".entrypoints", "https")
-		opts.WithLabel("traefik.http.routers."+service+".tls", "true")
-		opts.WithLabel("traefik.http.routers."+service+".tls.certresolver", "le")
-		opts.WithLabel("traefik.http.routers."+service+".service", service)
-		opts.WithLabel(
-			"traefik.http.services."+service+".loadbalancer.server.port",
-			url.Port,
-		)
-	}
+	// 	opts.WithLabel("traefik.http.routers."+service+".rule", rule)
+	// 	opts.WithLabel("traefik.http.routers."+service+".entrypoints", "https")
+	// 	opts.WithLabel("traefik.http.routers."+service+".tls", "true")
+	// 	opts.WithLabel("traefik.http.routers."+service+".tls.certresolver", "le")
+	// 	opts.WithLabel("traefik.http.routers."+service+".service", service)
+	// 	opts.WithLabel(
+	// 		"traefik.http.services."+service+".loadbalancer.server.port",
+	// 		url.Port,
+	// 	)
+	// }
 
 	return docker.RunContainer(opts)
 }
