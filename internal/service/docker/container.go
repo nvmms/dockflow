@@ -21,11 +21,6 @@ type ContainerLogOptions struct {
 	Tail   string
 }
 
-type ContainerExecOptions struct {
-	Workdir string
-	Env     []string
-}
-
 // ListContainers 列出容器
 func ListContainers(all bool) ([]types.Container, error) {
 	return Client().ContainerList(
@@ -113,6 +108,12 @@ func ContainerLogs(id string, opts ContainerLogOptions) (io.ReadCloser, error) {
 	)
 }
 
+type ContainerExecOptions struct {
+	Workdir string
+	Env     []string
+	Stdin   io.Reader
+}
+
 // ExecContainer 在容器中执行命令
 func ExecContainer(id string, cmd []string, opts ContainerExecOptions) (string, error) {
 	ctx := context.Background()
@@ -121,8 +122,10 @@ func ExecContainer(id string, cmd []string, opts ContainerExecOptions) (string, 
 		Cmd:          cmd,
 		AttachStdout: true,
 		AttachStderr: true,
+		AttachStdin:  opts.Stdin != nil,
 		WorkingDir:   opts.Workdir,
 		Env:          opts.Env,
+		Tty:          false,
 	})
 	if err != nil {
 		return "", err
@@ -138,6 +141,15 @@ func ExecContainer(id string, cmd []string, opts ContainerExecOptions) (string, 
 	}
 	defer resp.Close()
 
+	// 1️⃣ stdin → container
+	if opts.Stdin != nil {
+		go func() {
+			_, _ = io.Copy(resp.Conn, opts.Stdin)
+			_ = resp.CloseWrite()
+		}()
+	}
+
+	// 2️⃣ container → stdout/stderr
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, resp.Reader)
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 
 func init() {
 	rootCmd.AddCommand(databaseCmd)
-	databaseCmd.AddCommand(databaseCreateCmd, databaseListCmd, databaseRemoveCmd)
+	databaseCmd.AddCommand(databaseCreateCmd, databaseListCmd, databaseRemoveCmd, databaseExportCmd, databaseImportCmd)
 
 	databaseCreateCmd.Flags().Float64("cpu", 1, "CPU limit (cores)")
 	databaseCreateCmd.Flags().Float64("memory", 2, "Memory limit:GB")
@@ -132,4 +132,27 @@ func printDatabaseList(list []domain.DatabaseSpec) {
 			db.DbType, // redis / mysql / pg
 		)
 	}
+}
+
+var databaseExportCmd = &cobra.Command{
+	Use:   "export <namespace> <name>",
+	Short: "export database",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		namespace := args[0]
+		name := args[1]
+		return usecase.ExportSQL(namespace, name)
+	},
+}
+
+var databaseImportCmd = &cobra.Command{
+	Use:   "import <namespace> <name>",
+	Short: "import database",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		namespace := args[0]
+		name := args[1]
+
+		return usecase.ImportSQL(namespace, name, "")
+	},
 }

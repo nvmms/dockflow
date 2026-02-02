@@ -7,6 +7,7 @@ import (
 	"dockflow/internal/util"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
@@ -192,4 +193,73 @@ func detectDatabaseType(database domain.DatabaseSpec, opt *docker.ContainerRunOp
 		return ErrdatabaseNotSuppert
 	}
 	return nil
+}
+
+func ExportSQL(namespace, name string) error {
+	ns, err := filesystem.LoadNamespace(namespace)
+	if err != nil {
+		return err
+	}
+
+	database, found := lo.Find(ns.Database, func(d domain.DatabaseSpec) bool {
+		return d.Name == name
+	})
+	if !found {
+		return fmt.Errorf("database [%s] not exist", name)
+	}
+
+	opt := docker.ContainerExecOptions{}
+
+	out, err := docker.ExecContainer(
+		database.ContainerId,
+		[]string{
+			"mysqldump",
+			"-u", "dockflow",
+			database.DbName,
+		},
+		opt,
+	)
+	if err != nil {
+		return err
+	}
+
+	output := "/tmp/asdfasdf.sql"
+
+	return os.WriteFile(output, []byte(out), 0644)
+}
+
+func ImportSQL(namespace, name, sqlPath string) error {
+	ns, err := filesystem.LoadNamespace(namespace)
+	if err != nil {
+		return err
+	}
+
+	database, found := lo.Find(ns.Database, func(d domain.DatabaseSpec) bool {
+		return d.Name == name
+	})
+	if !found {
+		return fmt.Errorf("database [%s] not exist", name)
+	}
+
+	file, err := os.Open(sqlPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	opt := docker.ContainerExecOptions{
+		Stdin: file,
+	}
+
+	_, err = docker.ExecContainer(
+		database.ContainerId,
+		[]string{
+			"mysql",
+			"-u", "dockflow",
+			database.DbName,
+		},
+		opt,
+	)
+
+	return err
 }
