@@ -1,1 +1,3 @@
 dist/**
+pkg/usr/bin/**
+*.deb
