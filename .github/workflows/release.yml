@@ -1,0 +1,61 @@
+name: Build and Release .deb package
+
+on:
+  push:
+    tags:
+      - 'v*'  # 监听版本号标签（如 v1.0.0），触发发布
+  workflow_dispatch:  # 手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 检出代码
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      # 设置 Go 环境
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.25'
+
+      # 安装构建依赖（例如 fpm）
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby-dev
+          sudo gem install --no-document fpm
+
+      # 构建 Go 项目
+      - name: Build Go binary
+        run: |
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ./dist/dockflow ./cmd/dockflow
+
+      # 创建 .deb 包
+      - name: Build .deb package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          fpm -s dir -t deb \
+            -n dockflow \
+            -v "1.0.0" \
+            --architecture amd64 \
+            --deb-priority optional \
+            --deb-compression xz \
+            --deb-user root \
+            --deb-group root \
+            ./dist/dockflow=/usr/bin/dockflow
+
+      # 上传 .deb 包到 GitHub Release
+      - name: Upload .deb package to GitHub Release
+        uses: ghprb-robot/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./myapp.deb
+          asset_name: dockflow_${{ github.ref_name }}_amd64.deb
+          asset_content_type: application/vnd.debian.binary-package
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
