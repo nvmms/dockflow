@@ -221,6 +221,7 @@ func (d *AppDeployer) runApp(image, version string) (string, error) {
 	opts.WithNetwork(d.ns.Network)
 	opts.WithLabel("dockflow.namespace", d.ns.Name)
 	opts.WithLabel("dockflow.name", d.app.Name)
+	opts.WithLabel("dockflow.version", version)
 
 	// ---------- traefik ----------
 	// opts.WithLabel("traefik.enable", "true")
