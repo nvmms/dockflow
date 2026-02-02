@@ -27,14 +27,14 @@ var nsCreateCmd = &cobra.Command{
 	Use:   "create <name>",
 	Short: "Create namespace",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		ns, err := usecase.CreateNamespace(args[0])
 		if err != nil {
-			printError(err)
-			os.Exit(1)
+			return err
 		}
 
 		printNamespaces([]domain.Namespace{*ns})
+		return nil
 	},
 }
 
@@ -56,13 +56,13 @@ var nsRemoveCmd = &cobra.Command{
 	Use:   "remove <name>",
 	Short: "Remove namespace",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := usecase.RemoveNamespace(args[0]); err != nil {
-			printError(err)
-			os.Exit(1)
+			return err
 		}
 
 		fmt.Printf("Namespace '%s' removed\n", args[0])
+		return nil
 	},
 }
 
@@ -72,18 +72,17 @@ var nsInspectCmd = &cobra.Command{
 	Use:   "inspect <name>",
 	Short: "Inspect namespace",
 	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		ns, err := usecase.InspectNamespace(args[0])
 		if err != nil {
-			printError(err)
-			os.Exit(1)
+			return err
 		}
 		if ns == nil {
 			printNamespaces(nil)
-			return
+			return nil
 		}
 		printNamespaces([]domain.Namespace{*ns})
-
+		return nil
 	},
 }
 
