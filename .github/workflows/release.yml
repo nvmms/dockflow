@@ -10,6 +10,9 @@ on:
         description: 'Version number (e.g., 1.0.0)'
         required: true
 
+permissions:
+  contents: write
+  
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -70,6 +73,4 @@ jobs:
         with:
           files: dockflow_${{ steps.version.outputs.VERSION }}_amd64.deb
           prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
