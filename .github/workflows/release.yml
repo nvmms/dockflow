@@ -31,7 +31,7 @@ jobs:
       # 构建 Go 项目
       - name: Build Go binary
         run: |
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ./dist/dockflow ./cmd/dockflow
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ./pkg/usr/bin ./cmd/dockflow
 
       # 创建 .deb 包
       - name: Build .deb package
@@ -40,20 +40,21 @@ jobs:
 
           fpm -s dir -t deb \
             -n dockflow \
-            -v "1.0.0" \
+            -v "${VERSION}" \
             --architecture amd64 \
             --deb-priority optional \
             --deb-compression xz \
             --deb-user root \
             --deb-group root \
-            ./dist/dockflow=/usr/bin/dockflow
+            -C pkg \
+            usr etc
 
       # 上传 .deb 包到 GitHub Release
       - name: Upload .deb package to GitHub Release
         uses: ghprb-robot/upload-release-asset@v1
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ./myapp.deb
+          asset_path: ./dockflow_${{ github.ref_name }}_amd64.deb
           asset_name: dockflow_${{ github.ref_name }}_amd64.deb
           asset_content_type: application/vnd.debian.binary-package
         env:

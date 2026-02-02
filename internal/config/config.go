@@ -1,27 +1,17 @@
 package config
 
 import (
+	"dockflow/internal/service/filesystem"
 	"errors"
 	"os"
-	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Version          string               `yaml:"version"`
-	CurrentNamespace string               `yaml:"currentNamespace"`
-	Namespaces       map[string]Namespace `yaml:"namespaces"`
-	Platform         Platform             `yaml:"platform"`
-}
-
-type Namespace struct {
-	Apps map[string]App `yaml:"apps"`
-}
-
-type App struct {
-	Git  string `yaml:"git"`
-	Path string `yaml:"path"`
+	Version  string   `yaml:"version"`
+	Platform Platform `yaml:"platform"`
+	Git      Git      `yaml:"git"`
 }
 
 type Platform struct {
@@ -34,16 +24,23 @@ type Traefik struct {
 	NetworkId   string `yaml:"networkId"`
 }
 
-// Load loads dockflow config from ~/.dockflow/dockflow.yaml
+type GitToken struct {
+	Token string `yaml:"token"`
+}
+
+type GitGitlab struct {
+	Url   string `yaml:"url"`
+	Token string `yaml:"token"`
+}
+
+type Git struct {
+	Gitee  GitToken    `yaml:"gitee"`
+	Github GitToken    `yaml:"github"`
+	Gitlab []GitGitlab `yaml:"gitlab"`
+}
+
 func Load() (*Config, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-
-	cfgPath := filepath.Join(home, ".dockflow", "dockflow.yaml")
-
-	data, err := os.ReadFile(cfgPath)
+	data, err := os.ReadFile(filesystem.CfgPath)
 	if err != nil {
 		return nil, err
 	}
@@ -61,17 +58,10 @@ func Load() (*Config, error) {
 }
 
 func Save(cfg *Config) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-
-	path := filepath.Join(home, ".dockflow", "dockflow.yaml")
-
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(filesystem.CfgPath, data, 0644)
 }
