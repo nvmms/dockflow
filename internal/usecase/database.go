@@ -123,24 +123,23 @@ func Removedatabase(namespaceName string, databaseContainerName string) error {
 	if err != nil {
 		return err
 	}
-	if !isExist {
-		return ErrdatabaseNotExist
-	}
 
-	isRun, err := docker.ContainerRunning(database.ContainerId)
-	if err != nil {
-		return err
-	}
-	if isRun {
-		err := docker.StopContainer(database.ContainerId, nil)
+	if isExist {
+		isRun, err := docker.ContainerRunning(database.ContainerId)
 		if err != nil {
 			return err
 		}
-	}
+		if isRun {
+			err := docker.StopContainer(database.ContainerId, nil)
+			if err != nil {
+				return err
+			}
+		}
 
-	err = docker.RemoveContainer(database.ContainerId, true)
-	if err != nil {
-		return err
+		err = docker.RemoveContainer(database.ContainerId, true)
+		if err != nil {
+			return err
+		}
 	}
 
 	ns.Database = lo.Filter(ns.Database, func(item domain.DatabaseSpec, i int) bool {
@@ -149,7 +148,6 @@ func Removedatabase(namespaceName string, databaseContainerName string) error {
 	filesystem.SaveNamespace(*ns)
 
 	return nil
-
 }
 
 func detectDatabaseType(database domain.DatabaseSpec, opt *docker.ContainerRunOptions) (err error) {
