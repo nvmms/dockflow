@@ -117,3 +117,7 @@ func Build(path string, tag string) error {
 
 	return nil
 }
+
+func RemoveVolume(name string) error {
+	return Client().VolumeRemove(Ctx(), name, true)
+}

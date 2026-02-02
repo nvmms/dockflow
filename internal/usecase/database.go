@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/samber/lo"
 )
 
@@ -125,10 +126,16 @@ func Removedatabase(namespaceName string, databaseContainerName string) error {
 	}
 
 	if isExist {
+		containerInfo, err := docker.InspectContainer(database.ContainerId)
+		if err != nil {
+			return err
+		}
+
 		isRun, err := docker.ContainerRunning(database.ContainerId)
 		if err != nil {
 			return err
 		}
+
 		if isRun {
 			err := docker.StopContainer(database.ContainerId, nil)
 			if err != nil {
@@ -139,6 +146,15 @@ func Removedatabase(namespaceName string, databaseContainerName string) error {
 		err = docker.RemoveContainer(database.ContainerId, true)
 		if err != nil {
 			return err
+		}
+
+		for _, m := range containerInfo.Mounts {
+			if m.Type == mount.TypeVolume {
+				err := docker.RemoveVolume(m.Name)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 
