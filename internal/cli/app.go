@@ -2,7 +2,6 @@ package cli
 
 import (
 	"dockflow/internal/domain"
-	"dockflow/internal/service/docker"
 	"dockflow/internal/usecase"
 	"encoding/json"
 	"errors"
@@ -10,7 +9,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/samber/lo"
 	"github.com/spf13/cobra"
 )
 
@@ -88,12 +86,12 @@ var appCreateCmd = &cobra.Command{
 		fmt.Printf("%s", platform)
 		os.Exit(0)
 
-		if platform == "" {
-			return fmt.Errorf("platform is required, %s", docker.BuildTypeEnum)
-		}
-		if !lo.Contains(docker.BuildTypeEnum, platform) {
-			return fmt.Errorf("platform is not support, support list: %s", docker.BuildTypeEnum)
-		}
+		// if platform == "" {
+		// 	return fmt.Errorf("platform is required, %s", docker.BuildTypeEnum)
+		// }
+		// if !lo.Contains(docker.BuildTypeEnum, platform) {
+		// 	return fmt.Errorf("platform is not support, support list: %s", docker.BuildTypeEnum)
+		// }
 
 		buildArgsStr, _ := cmd.Flags().GetString("build-args")
 		var buildArgsMap map[string]*string
@@ -166,7 +164,7 @@ var appCreateCmd = &cobra.Command{
 			Envs:      envs,
 			URLs:      urls,
 			BuildArg:  buildArgsMap,
-			Platform:  platform,
+			// Platform:  platform,
 		}
 
 		err = usecase.CreateApp(spec)

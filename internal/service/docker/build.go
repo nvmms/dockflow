@@ -12,11 +12,9 @@ import (
 	"path/filepath"
 
 	"github.com/docker/docker/api/types"
-	"github.com/otiai10/copy"
-	"github.com/samber/lo"
 )
 
-var BuildTypeEnum = []string{"go", "java", "node-page", "node-service", "php", "python"}
+// var BuildTypeEnum = []string{"go", "java", "node-page", "node-service", "php", "python"}
 
 var (
 	ErrorBuildTypeNotExist = errors.New("build type not exist")
@@ -72,11 +70,7 @@ func TarBuildContext(dir string) (io.Reader, error) {
 	return buf, nil
 }
 
-func Build(path string, tag string, buildtype string, args map[string]*string) error {
-	if !lo.Contains(BuildTypeEnum, buildtype) {
-		return ErrorBuildTypeNotExist
-	}
-
+func Build(path string, tag string) error {
 	isExist, err := filesystem.DirExists(path)
 	if err != nil {
 		return err
@@ -86,12 +80,6 @@ func Build(path string, tag string, buildtype string, args map[string]*string) e
 		return ErrorBuildPathNotExist
 	}
 
-	err = copy.Copy(filesystem.BuildDockerfilePath+buildtype, path+"/Dockerfile."+buildtype)
-	if err != nil {
-		print("copy dockerfile err: \n")
-		return err
-	}
-
 	tarReader, err := TarBuildContext(path)
 	if err != nil {
 		return err
@@ -99,9 +87,9 @@ func Build(path string, tag string, buildtype string, args map[string]*string) e
 
 	opts := types.ImageBuildOptions{
 		Tags:       []string{tag},
-		Dockerfile: "Dockerfile." + buildtype,
+		Dockerfile: "Dockerfile",
 		Remove:     true,
-		BuildArgs:  args,
+		// BuildArgs:  args,
 	}
 
 	resp, err := Client().ImageBuild(Ctx(), tarReader, opts)

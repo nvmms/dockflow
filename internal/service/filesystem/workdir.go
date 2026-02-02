@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	// CfgPath             = "/etc/dockflow/dockflow.yaml"
-	CfgPath             = "/home/heeig/dockflow/pkg/etc/dockflow/dockflow.yaml"
+	CfgPath = "/etc/dockflow/dockflow.yaml"
+	// CfgPath             = "/home/heeig/dockflow/pkg/etc/dockflow/dockflow.yaml"
 	BaseDirName         = "/var/lib/dockflow"
 	NamespaceDirName    = BaseDirName + "/namespace"
 	BuildDockerfilePath = BaseDirName + "/build-templates/Dockerfile."
