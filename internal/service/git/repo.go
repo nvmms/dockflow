@@ -1,6 +1,8 @@
 package git
 
 import (
+	dockflowConfig "dockflow/internal/config"
+	"dockflow/internal/domain"
 	"dockflow/internal/service/filesystem"
 	"errors"
 	"fmt"
@@ -57,6 +59,20 @@ func ResolveCommit(opts GitCloneOptions) (string, error) {
 		listOpts.Auth = &http.BasicAuth{
 			Username: "oauth2",
 			Password: opts.Token,
+		}
+	} else {
+		gitInfo, err := domain.NewGitUrl(opts.RepoURL)
+		if err != nil {
+			return "", err
+		}
+
+		token, err := dockflowConfig.FindGit(gitInfo.Host, gitInfo.Username)
+		if err != nil {
+			return "", err
+		}
+		listOpts.Auth = &http.BasicAuth{
+			Username: "oauth2",
+			Password: token,
 		}
 	}
 
