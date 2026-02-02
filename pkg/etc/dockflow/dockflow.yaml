@@ -1,0 +1,15 @@
+version: v0.1
+platform:
+    traefik:
+        acmeEmail: 
+        containerId: 
+        networkId: 
+
+git:
+  gitee.com: 
+    token: 
+  github.com: 
+    token: 
+  gitlab.com:
+    url: 
+    token: 
