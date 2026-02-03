@@ -29,17 +29,17 @@ func InspectNetwork(id string) (types.NetworkResource, error) {
 }
 
 // HasNetwork 判断网络是否存在（支持 name 或 id）
-func HasNetwork(networkID string) (bool, error) {
+func HasNetwork(networkID string) (string, error) {
 	list, err := ListNetworks()
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	for _, item := range list {
 		if item.ID == networkID || item.Name == networkID {
-			return true, nil
+			return item.ID, nil
 		}
 	}
-	return false, nil
+	return "", nil
 }
 
 // RemoveNetwork 删除网络
