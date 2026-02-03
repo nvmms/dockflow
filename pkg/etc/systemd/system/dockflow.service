@@ -7,16 +7,13 @@ Requires=docker.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/dockflow daemon
+ExecStart=/usr/bin/dockflow daemon
 Restart=always
 RestartSec=5
 
 # 安全 & 运行环境
 User=root
 WorkingDirectory=/var/lib/dockflow
-
-# 环境变量（如果你有）
-Environment=DOCKFLOW_CONFIG=/etc/dockflow/config.yaml
 
 # 日志
 StandardOutput=journal
