@@ -73,6 +73,13 @@ func handleContainerEvent(msg events.Message) {
 		}
 		labels := containerInfo.Config.Labels
 
+		traefikNetworkIp := ""
+		for networkName, network := range containerInfo.NetworkSettings.Networks {
+			if networkName == "dockflow-traefik" {
+				traefikNetworkIp = network.IPAddress
+			}
+		}
+
 		namespace, exists := labels["dockflow.namespace"]
 		if !exists || namespace == "" {
 			return
@@ -99,6 +106,29 @@ func handleContainerEvent(msg events.Message) {
 		if !found || app.Name == "" {
 			return
 		}
+
+		cfg, err := domain.NewTraefikConfig(filesystem.TraefikCfgDir + "/" + app.Name + ".yaml")
+		if err != nil {
+			log.Println("[traefik]      ", err)
+			return
+		}
+
+		for _, url := range app.URLs {
+			rule := url.Host
+			if version != "latest" {
+				rule += "/" + version
+			}
+			traefikOpt := domain.TraefikServiceOpt{
+				Name: app.Name + "_" + version + "_" + url.Port,
+				Rule: rule,
+				Url:  traefikNetworkIp + ":" + url.Port,
+			}
+			cfg.AddService(traefikOpt)
+		}
+
+		cfg.Save()
+
+		println(app.Name)
 
 	case "die":
 		log.Println("[container die]", containerID)

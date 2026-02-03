@@ -8,6 +8,7 @@ import (
 
 const (
 	CfgDir              = "/etc/dockflow/"
+	TraefikCfgDir       = CfgDir + "/traefik"
 	CfgPath             = CfgDir + "dockflow.yaml"
 	CfgScriptDir        = CfgDir + "script/"
 	MySqlInitScript     = CfgScriptDir + "mysql_init_script.sql"

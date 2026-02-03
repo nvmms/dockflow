@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -90,7 +91,6 @@ func (c *TraefikConfig) Load() error {
 }
 
 func (c *TraefikConfig) AddService(opt TraefikServiceOpt) {
-	// 初始化 map（非常重要）
 	if c.HTTP.Routers == nil {
 		c.HTTP.Routers = make(map[string]Router)
 	}
@@ -102,14 +102,16 @@ func (c *TraefikConfig) AddService(opt TraefikServiceOpt) {
 	serviceName := "svc-" + opt.Name
 
 	c.HTTP.Routers[routerName] = Router{
-		Rule:    opt.Rule,
+		Rule:    normalizeRule(opt.Rule),
 		Service: serviceName,
 	}
 
 	c.HTTP.Services[serviceName] = Service{
 		LoadBalancer: &LoadBalancer{
 			Servers: []Servers{
-				{URL: opt.Url},
+				{
+					URL: normalizeURL(opt.Url),
+				},
 			},
 		},
 	}
@@ -143,4 +145,45 @@ func (c *TraefikConfig) RemoveService(name string) {
 	}
 }
 
-func (c *TraefikConfig) DebugPrint()
+func (c *TraefikConfig) DebugPrint() {}
+
+func normalizeRule(rule string) string {
+	rule = strings.TrimSpace(rule)
+
+	// 已经是 Traefik Rule，直接放行（兜底）
+	if strings.Contains(rule, "Host(") {
+		return rule
+	}
+
+	host := rule
+	path := ""
+
+	if idx := strings.Index(rule, "/"); idx != -1 {
+		host = rule[:idx]
+		path = rule[idx:]
+	}
+
+	if path == "" {
+		return fmt.Sprintf(`Host("%s")`, host)
+	}
+
+	return fmt.Sprintf(
+		`Host("%s") && PathPrefix("%s")`,
+		host,
+		path,
+	)
+}
+
+func normalizeURL(raw string) string {
+	if raw == "" {
+		return raw
+	}
+
+	// 已经有协议，直接返回
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+
+	// 否则默认补 http://
+	return "http://" + raw
+}
