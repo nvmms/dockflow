@@ -58,6 +58,22 @@ func (d *AppDeployer) Deploy(branch, commit, tag *string) error {
 		return err
 	}
 
+	containerId, err := docker.HasContainer(d.app.Name + "_" + version)
+	if err != nil {
+		return err
+	}
+
+	if containerId != "" {
+		err := docker.StopContainer(containerId, nil)
+		if err != nil {
+			return err
+		}
+		err = docker.RemoveContainer(containerId, true)
+		if err != nil {
+			return err
+		}
+	}
+
 	// ---------- build ----------
 	image, err := d.buildApp(version)
 	if err != nil {
@@ -261,16 +277,16 @@ func (d *AppDeployer) cleanupOldContainer(version string) error {
 			continue
 		}
 
-		exist, err := docker.HasContainer(deploy.ContainerId)
+		containerId, err := docker.HasContainer(deploy.ContainerId)
 		if err != nil {
 			return err
 		}
 
-		if exist {
-			if err := docker.StopContainer(deploy.ContainerId, nil); err != nil {
+		if containerId != "" {
+			if err := docker.StopContainer(containerId, nil); err != nil {
 				return err
 			}
-			if err := docker.RemoveContainer(deploy.ContainerId, true); err != nil {
+			if err := docker.RemoveContainer(containerId, true); err != nil {
 				return err
 			}
 		}
