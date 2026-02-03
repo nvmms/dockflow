@@ -1,3 +1,4 @@
 dist/**
 pkg/usr/bin/**
 *.deb
+pkg/etc/dockflow/traefik/**

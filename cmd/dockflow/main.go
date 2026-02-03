@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"dockflow/internal/cli"
-	"dockflow/internal/service/docker"
+	"dockflow/internal/service/monitor"
 	"log"
 	"os"
 	"os/signal"
@@ -26,7 +26,7 @@ func runCLI() {
 func runDaemon() {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	go docker.ListenDockerEvents(ctx)
+	go monitor.ListenDockerEvents(ctx)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)

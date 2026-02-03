@@ -22,16 +22,15 @@ type AppDeploy struct {
 }
 
 type AppSpec struct {
-	Namespace string   `json:"namespace"`
-	Name      string   `json:"name"`
-	CPU       float64  `json:"cpu"`     // CPU cores
-	Memory    int      `json:"memory"`  // Memory in GB
-	Repo      string   `json:"repo"`    // Git repository
-	Token     string   `json:"token"`   // Git access token (optional)
-	Trigger   Trigger  `json:"trigger"` // Deploy trigger
-	Envs      []Env    `json:"env"`     // Environment variables
-	URLs      []AppURL `json:"url"`     // Access rules
-	// Platform  string             `json:"platform"`
-	Deploy   []AppDeploy        `json:"deploy"`
-	BuildArg map[string]*string `json:"buildArg"`
+	Namespace string             `json:"namespace"`
+	Name      string             `json:"name"`
+	CPU       float64            `json:"cpu"`     // CPU cores
+	Memory    int                `json:"memory"`  // Memory in GB
+	Repo      string             `json:"repo"`    // Git repository
+	Token     string             `json:"token"`   // Git access token (optional)
+	Trigger   Trigger            `json:"trigger"` // Deploy trigger
+	Envs      []Env              `json:"env"`     // Environment variables
+	URLs      []AppURL           `json:"url"`     // Access rules
+	Deploy    []AppDeploy        `json:"deploy"`
+	BuildArg  map[string]*string `json:"buildArg"`
 }
