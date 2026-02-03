@@ -1,7 +1,6 @@
 package filesystem
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 )
@@ -38,30 +37,14 @@ func PrepareWorkspace() error {
 	}
 
 	// 3. dockflow.yaml
-	cfgPath := filepath.Join(BaseDirName, "dockflow.yaml")
-	if _, err := os.Stat(cfgPath); errors.Is(err, os.ErrNotExist) {
-		if err := os.WriteFile(cfgPath, defaultConfig(), 0644); err != nil {
-			return err
-		}
-	}
+	// cfgPath := filepath.Join(BaseDirName, "dockflow.yaml")
+	// if _, err := os.Stat(cfgPath); errors.Is(err, os.ErrNotExist) {
+	// 	if err := os.WriteFile(cfgPath, defaultConfig(), 0644); err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	return nil
-}
-
-func defaultConfig() []byte {
-	return []byte(`
-version: v0.1
-
-platform:
-  traefik:
-    acmeEmail: ""
-
-currentNamespace: default
-
-namespaces:
-  default:
-    apps: {}
-`)
 }
 
 func DirExists(path string) (bool, error) {

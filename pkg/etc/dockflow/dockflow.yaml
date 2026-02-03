@@ -7,14 +7,18 @@ platform:
 
 git:
   gitee:
-    token: 
+    - name:
+      token: 
 
   github:
-    token: 
+    - name:
+      token: 
 
   gitlab:
     - url: 
+      name:
       token: 
 
     - url: 
+      name:
       token: 
