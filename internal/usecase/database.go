@@ -120,12 +120,12 @@ func Removedatabase(namespaceName string, databaseContainerName string) error {
 		return ErrdatabaseNotExist
 	}
 
-	isExist, err := docker.HasContainer(database.ContainerId)
+	containerId, err := docker.HasContainer(database.ContainerId)
 	if err != nil {
 		return err
 	}
 
-	if isExist {
+	if containerId != "" {
 		containerInfo, err := docker.InspectContainer(database.ContainerId)
 		if err != nil {
 			return err

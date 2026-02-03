@@ -102,11 +102,11 @@ func RemoveRedis(namespaceName string, redisContainerName string) error {
 		return ErrRedisNotExist
 	}
 
-	isExist, err := docker.HasContainer(redis.ContainerId)
+	containerId, err := docker.HasContainer(redis.ContainerId)
 	if err != nil {
 		return err
 	}
-	if !isExist {
+	if containerId != "" {
 		return ErrRedisNotExist
 	}
 

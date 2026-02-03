@@ -137,11 +137,11 @@ func ensureContainer(cfg *config.Config, acmeEmail string) (err error) {
 		cfg.Platform.Traefik.ContainerId = containerId
 		config.Save(cfg)
 	} else {
-		isExist, err := docker.HasContainer(containerId)
+		containerId, err := docker.HasContainer(containerId)
 		if err != nil {
 			return err
 		}
-		if !isExist {
+		if containerId != "" {
 			containerId, err = createTraefikContainer(acmeEmail)
 			cfg.Platform.Traefik.ContainerId = containerId
 			config.Save(cfg)
