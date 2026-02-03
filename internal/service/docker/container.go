@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/go-connections/nat"
+	"github.com/samber/lo"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -29,17 +30,17 @@ func ListContainers(all bool) ([]types.Container, error) {
 	)
 }
 
-func HasContainer(containerId string) (bool, error) {
+func HasContainer(containerId string) (string, error) {
 	list, err := ListContainers(true)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	for _, item := range list {
-		if item.ID == containerId {
-			return true, nil
+		if item.ID == containerId || lo.Contains(item.Names, "/"+containerId) {
+			return item.ID, nil
 		}
 	}
-	return false, nil
+	return "", nil
 }
 
 func ContainerRunning(containerId string) (bool, error) {
