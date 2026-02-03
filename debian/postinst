@@ -11,12 +11,12 @@ case "$1" in
     # 数据目录
     mkdir -p /var/lib/dockflow
     chown -R root:dockflow /var/lib/dockflow
-    chmod 775 /var/lib/dockflow
+    chmod -R g+rwX /etc/dockflow
 
     # 配置目录（如果存在）
     if [ -d /etc/dockflow ]; then
         chown -R root:dockflow /etc/dockflow
-        chmod 775 /etc/dockflow
+        chmod -R g+rwX /etc/dockflow
     fi
 
     echo ""
