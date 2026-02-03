@@ -6,6 +6,7 @@ import (
 	"dockflow/internal/service/docker"
 	"dockflow/internal/service/filesystem"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -29,6 +30,7 @@ func Init() error {
 	if err != nil {
 		return err
 	}
+
 	config.Save(cfg)
 
 	// if err := system.CheckPorts(80, 443); err != nil {
@@ -80,6 +82,7 @@ func ensureAcmeEmail(cfg *config.Config) (string, error) {
 }
 
 func ensureNetwork(cfg *config.Config) (err error) {
+	log.Println("[dockflow init]", "create traefik network")
 	networkId := strings.TrimSpace(cfg.Platform.Traefik.ContainerId)
 	if networkId == "" {
 		networkId, err = createTraefikNetwork(cfg)
@@ -129,17 +132,19 @@ func createTraefikNetwork(cfg *config.Config) (string, error) {
 
 func ensureContainer(cfg *config.Config, acmeEmail string) (err error) {
 	containerId := strings.TrimSpace(cfg.Platform.Traefik.ContainerId)
+
 	if containerId == "" {
 		containerId, err = createTraefikContainer(acmeEmail)
 		if err != nil {
-			err = docker.StopContainer(containerId, nil)
-			if err != nil {
-				return err
-			}
-			err = docker.RemoveContainer(containerId, true)
-			if err != nil {
-				return err
-			}
+			panic(err)
+			// err = docker.StopContainer(containerId, nil)
+			// if err != nil {
+			// 	panic(err)
+			// }
+			// err = docker.RemoveContainer(containerId, true)
+			// if err != nil {
+			// 	panic(err)
+			// }
 		}
 
 		cfg.Platform.Traefik.ContainerId = containerId
@@ -147,21 +152,21 @@ func ensureContainer(cfg *config.Config, acmeEmail string) (err error) {
 	} else {
 		containerId, err := docker.HasContainer(containerId)
 		if err != nil {
-			return err
+			panic(err)
 		}
-		if containerId != "" {
+		if containerId == "" {
 			containerId, err = createTraefikContainer(acmeEmail)
 			cfg.Platform.Traefik.ContainerId = containerId
 			config.Save(cfg)
 		} else {
 			isRun, err := docker.ContainerRunning(containerId)
 			if err != nil {
-				return err
+				panic(err)
 			}
 			if !isRun {
 				err = docker.StartContainer(containerId)
 				if err != nil {
-					return err
+					panic(err)
 				}
 			}
 		}
