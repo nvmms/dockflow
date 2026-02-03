@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"dockflow/internal/config"
 	"dockflow/internal/service/docker"
+	"dockflow/internal/service/filesystem"
 	"fmt"
 	"os"
 	"strings"
@@ -181,24 +182,16 @@ func createTraefikContainer(acmeEmail string) (containerId string, err error) {
 	opt.WithPort(443, 443)
 
 	opt.WithVolume("/var/run/docker.sock", "/var/run/docker.sock", "ro")
-	opt.WithVolume(TraefikVolume, "/letsencrypt")
+	opt.WithVolume(filesystem.TraefikMainCfg, "/etc/traefik/traefik.yml", "ro")
+	opt.WithVolume(filesystem.TraefikCfgDir, "/etc/traefik/dynamic", "ro")
+	opt.WithVolume(filesystem.TraefikAcmeCfg, "/var/lib/traefik/acme.json", "rw")
+
+	opt.WithEnv("TRAEFIK_ACME_EMAIL", acmeEmail)
 
 	opt.WithCommand(
-		"--api=true",
-		"--api.dashboard=false",
-		"--api.insecure=false",
+		"--configFile=/etc/traefik/traefik.yml",
 		"--ping=true",
-
-		"--entrypoints.http.address=:80",
-		"--entrypoints.https.address=:443",
-		"--providers.docker=true",
-		"--providers.docker.endpoint=unix:///var/run/docker.sock",
-		"--providers.docker.exposedbydefault=false",
-
-		"--certificatesresolvers.le.acme.email="+acmeEmail,
-		"--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json",
-		"--certificatesresolvers.le.acme.httpchallenge=true",
-		"--certificatesresolvers.le.acme.httpchallenge.entrypoint=http",
+		"--providers.providersThrottleDuration=2s",
 	)
 
 	containerId, err = docker.RunContainer(opt)

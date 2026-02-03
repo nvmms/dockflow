@@ -7,9 +7,11 @@ import (
 
 const (
 	CfgDir              = "/etc/dockflow/"
-	TraefikCfgDir       = CfgDir + "/traefik"
 	CfgPath             = CfgDir + "dockflow.yaml"
 	CfgScriptDir        = CfgDir + "script/"
+	TraefikCfgDir       = CfgDir + "/traefik/dynamic"
+	TraefikMainCfg      = CfgDir + "/traefik/traefik.yml"
+	TraefikAcmeCfg      = CfgDir + "/traefik/acme.json"
 	MySqlInitScript     = CfgScriptDir + "mysql_init_script.sql"
 	PgSqlInitScript     = CfgScriptDir + "pgsql_init_script.sql"
 	BaseDirName         = "/var/lib/dockflow"

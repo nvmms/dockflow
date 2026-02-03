@@ -1,4 +1,4 @@
 dist/**
 pkg/usr/bin/**
 *.deb
-pkg/etc/dockflow/traefik/**
+pkg/etc/dockflow/traefik/dynamic/**
