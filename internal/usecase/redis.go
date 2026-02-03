@@ -106,7 +106,7 @@ func RemoveRedis(namespaceName string, redisContainerName string) error {
 	if err != nil {
 		return err
 	}
-	if containerId != "" {
+	if containerId == "" {
 		return ErrRedisNotExist
 	}
 
