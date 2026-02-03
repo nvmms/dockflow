@@ -141,3 +141,11 @@ func getGitlabHost(url string) string {
 	url = strings.ReplaceAll(url, "https://", "")
 	return url
 }
+
+func RepoList() (*config.Git, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	return &cfg.Git, nil
+}

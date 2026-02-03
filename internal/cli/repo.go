@@ -15,7 +15,7 @@ var (
 
 func init() {
 	rootCmd.AddCommand(repoCmd)
-	repoCmd.AddCommand(repoAddCmd, repoUpdateCmd, repoRemoveCmd)
+	repoCmd.AddCommand(repoAddCmd, repoUpdateCmd, repoRemoveCmd, repoListCmd)
 
 	// repoAddCmd.Flags().String("repo", "", fmt.Sprintf("git repo type : %v", supportGitRepo))
 	repoAddCmd.Flags().String("url", "", "only gitlab repo need set url")
@@ -140,5 +140,32 @@ var repoRemoveCmd = &cobra.Command{
 			"repo": repo,
 			"name": name,
 		})
+	},
+}
+
+var repoListCmd = &cobra.Command{
+	Use:     "list",
+	Short:   "list git repo token",
+	Aliases: []string{"ls"},
+	Args:    cobra.ExactArgs(0),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		git, err := usecase.RepoList()
+		if err != nil {
+			return err
+		}
+		for _, v := range git.Gitee {
+			print(v.Name)
+			print(v.Token)
+		}
+		for _, v := range git.Github {
+			print(v.Name)
+			print(v.Token)
+		}
+		for _, v := range git.Gitlab {
+			print(v.Url)
+			print(v.Name)
+			print(v.Token)
+		}
+		return nil
 	},
 }

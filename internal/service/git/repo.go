@@ -55,30 +55,12 @@ func ResolveCommit(opts GitCloneOptions) (string, error) {
 	})
 
 	listOpts := &git.ListOptions{}
-	if opts.Token != "" {
-		listOpts.Auth = &http.BasicAuth{
-			Username: "oauth2",
-			Password: opts.Token,
-		}
-	} else {
-		gitInfo, err := domain.NewGitUrl(opts.RepoURL)
-		if err != nil {
-			return "", err
-		}
-
-		token, err := dockflowConfig.FindGit(gitInfo.Host, gitInfo.Username)
-		if err != nil {
-			return "", err
-		}
-		listOpts.Auth = &http.BasicAuth{
-			Username: "oauth2",
-			Password: token,
-		}
-	}
+	listOpts.Auth = auth(opts)
 
 	refs, err := remote.List(listOpts)
+
 	if err != nil {
-		return "", err
+		panic(err)
 	}
 
 	// 小工具：按 refname 查 hash
@@ -266,22 +248,30 @@ func cloneRepo(opts GitCloneOptions) (*git.Repository, error) {
 		URL: opts.RepoURL,
 	}
 
-	if opts.Token != "" {
-		cloneOpts.Auth = &http.BasicAuth{
-			Username: "oauth2",
-			Password: opts.Token,
-		}
-	}
+	cloneOpts.Auth = auth(opts)
 
 	return git.PlainClone(opts.DestDir, false, cloneOpts)
 }
 
 func auth(opts GitCloneOptions) transport.AuthMethod {
-	if opts.Token == "" {
-		return nil
-	}
-	return &http.BasicAuth{
-		Username: "oauth2",
-		Password: opts.Token,
+	if opts.Token != "" {
+		return &http.BasicAuth{
+			Username: "oauth2",
+			Password: opts.Token,
+		}
+	} else {
+		gitInfo, err := domain.NewGitUrl(opts.RepoURL)
+		if err != nil {
+			panic(err)
+		}
+
+		token, err := dockflowConfig.FindGit(gitInfo.Host, gitInfo.Username)
+		if err != nil {
+			panic(err)
+		}
+		return &http.BasicAuth{
+			Username: "oauth2",
+			Password: token,
+		}
 	}
 }

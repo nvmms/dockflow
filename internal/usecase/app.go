@@ -42,9 +42,9 @@ func CreateApp(app domain.AppSpec) error {
 	if app.Repo == "" {
 		return fmt.Errorf("repo is required")
 	}
-	if app.Token == "" {
-		return fmt.Errorf("token is required")
-	}
+	// if app.Token == "" {
+	// 	return fmt.Errorf("token is required")
+	// }
 
 	// ---------- trigger validate ----------
 	switch app.Trigger.Type {

@@ -3,7 +3,6 @@ package cli
 import (
 	"dockflow/internal/domain"
 	"dockflow/internal/usecase"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -19,8 +18,8 @@ func init() {
 	appCreateCmd.Flags().Int("memory", 1, "Memory limit (GB)")
 	appCreateCmd.Flags().String("repo", "", "Git repository url")
 	appCreateCmd.Flags().String("token", "", "Git access token")
-	appCreateCmd.Flags().String("platform", "", "deploy platform")
-	appCreateCmd.Flags().String("build-args", "", "build args for platform, json {\"NODE_VERSION\":\"20\",\"BUILD_CMD\":\"npm run build\",\"DIST_DIR\":\"./dist1\"}")
+	// appCreateCmd.Flags().String("platform", "", "deploy platform")
+	// appCreateCmd.Flags().String("build-args", "", "build args for platform, json {\"NODE_VERSION\":\"20\",\"BUILD_CMD\":\"npm run build\",\"DIST_DIR\":\"./dist1\"}")
 	appCreateCmd.Flags().String(
 		"trigger-type",
 		"branch",
@@ -81,20 +80,20 @@ var appCreateCmd = &cobra.Command{
 		envFlags, _ := cmd.Flags().GetStringArray("env")
 		urlFlags, _ := cmd.Flags().GetStringArray("url")
 
-		buildArgsStr, _ := cmd.Flags().GetString("build-args")
-		var buildArgsMap map[string]*string
-		err := json.Unmarshal([]byte(buildArgsStr), &buildArgsMap)
-		if err != nil {
-			return fmt.Errorf("build args must be json")
-		}
+		// buildArgsStr, _ := cmd.Flags().GetString("build-args")
+		// var buildArgsMap map[string]*string
+		// err := json.Unmarshal([]byte(buildArgsStr), &buildArgsMap)
+		// if err != nil {
+		// 	return fmt.Errorf("build args must be json")
+		// }
 
 		// ---------- basic validate ----------
 		if repo == "" {
 			return fmt.Errorf("repo is required")
 		}
-		if token == "" {
-			return fmt.Errorf("token is required")
-		}
+		// if token == "" {
+		// 	return fmt.Errorf("token is required")
+		// }
 
 		// ---------- trigger ----------
 		if triggerRule == "" {
@@ -151,11 +150,11 @@ var appCreateCmd = &cobra.Command{
 			Trigger:   trigger,
 			Envs:      envs,
 			URLs:      urls,
-			BuildArg:  buildArgsMap,
+			// BuildArg:  buildArgsMap,
 			// Platform:  platform,
 		}
 
-		err = usecase.CreateApp(spec)
+		err := usecase.CreateApp(spec)
 		if err != nil {
 			return err
 		}
