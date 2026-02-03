@@ -131,7 +131,14 @@ func ensureContainer(cfg *config.Config, acmeEmail string) (err error) {
 	if containerId == "" {
 		containerId, err = createTraefikContainer(acmeEmail)
 		if err != nil {
-			return err
+			err = docker.StopContainer(containerId, nil)
+			if err != nil {
+				return err
+			}
+			err = docker.RemoveContainer(containerId, true)
+			if err != nil {
+				return err
+			}
 		}
 
 		cfg.Platform.Traefik.ContainerId = containerId
