@@ -46,7 +46,7 @@ func CreateRedis(redis domain.RedisSpec) error {
 	opts.WithCommand(
 		"redis-server",
 		"--requirepass",
-		"redis.Password",
+		redis.Password,
 		"--appendonly",
 		aof,
 		"--maxmemory-policy",
