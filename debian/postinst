@@ -1,0 +1,40 @@
+#!/bin/sh
+
+#!/bin/sh
+set -e
+
+case "$1" in
+  configure)
+    # 创建系统组
+    getent group dockflow >/dev/null 2>&1 || groupadd -r dockflow
+
+    # 数据目录
+    mkdir -p /var/lib/dockflow
+    chown -R root:dockflow /var/lib/dockflow
+    chmod 775 /var/lib/dockflow
+
+    # 配置目录（如果存在）
+    if [ -d /etc/dockflow ]; then
+        chown -R root:dockflow /etc/dockflow
+        chmod 775 /etc/dockflow
+    fi
+
+    echo ""
+    echo "DockFlow has been installed."
+    echo ""
+    echo "Next steps:"
+    echo "  1) Reload systemd:"
+    echo "     sudo systemctl daemon-reload"
+    echo ""
+    echo "  2) Enable and start DockFlow service:"
+    echo "     sudo systemctl enable dockflow"
+    echo "     sudo systemctl start dockflow"
+    echo ""
+    echo "  3) Allow your user to access DockFlow data:"
+    echo "     sudo usermod -aG dockflow <your-username>"
+    echo "     (log out and log back in to apply group changes)"
+    echo ""
+    ;;
+esac
+
+exit 0

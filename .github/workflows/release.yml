@@ -64,6 +64,7 @@ jobs:
             --deb-compression xz \
             --deb-user root \
             --deb-group root \
+            --after-install debian/postinst \
             -C pkg \
             usr etc
 
