@@ -90,6 +90,7 @@ func (m *MonitorContainer) findApp() {
 }
 
 func (m *MonitorContainer) onStart() {
+	log.Println("[container onStart]", m.ContainerId)
 	m.findApp()
 	m.TraefikConfigFile = filesystem.TraefikCfgDir + "/" + m.App.Name + ".yaml"
 
@@ -123,5 +124,6 @@ func (m *MonitorContainer) onStart() {
 }
 
 func (m *MonitorContainer) onDie() {
+	log.Println("[container onDie]", m.ContainerId)
 	os.Remove(m.TraefikConfigFile)
 }
