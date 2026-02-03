@@ -38,6 +38,10 @@ func Init() error {
 		return err
 	}
 
+	if err := docker.PullImage(TraefikImage); err != nil {
+		return err
+	}
+
 	if err := ensureContainer(cfg, email); err != nil {
 		return err
 	}
@@ -82,12 +86,15 @@ func ensureNetwork(cfg *config.Config) (err error) {
 			return err
 		}
 	} else {
-		isExist, err := docker.HasNetwork(networkId)
+		networkId, err := docker.HasNetwork(networkId)
 		if err != nil {
 			return err
 		}
-		if !isExist {
+		if networkId == "" {
 			networkId, err = createTraefikNetwork(cfg)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	config.Save(cfg)
@@ -95,6 +102,13 @@ func ensureNetwork(cfg *config.Config) (err error) {
 }
 
 func createTraefikNetwork(cfg *config.Config) (string, error) {
+	networkId, err := docker.HasNetwork(TraefikNetwork)
+	if err != nil {
+		return "", err
+	}
+	if networkId != "" {
+		return networkId, nil
+	}
 	opts := docker.NetworkCreateOptions{
 		Name:       TraefikNetwork,
 		Driver:     "bridge",
@@ -102,7 +116,7 @@ func createTraefikNetwork(cfg *config.Config) (string, error) {
 		Gateway:    "10.0.0.1",
 		Attachable: true,
 	}
-	networkId, err := docker.CreateNetwork(opts)
+	networkId, err = docker.CreateNetwork(opts)
 	if err != nil {
 		return "", err
 	}
