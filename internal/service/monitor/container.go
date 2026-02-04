@@ -18,50 +18,55 @@ type MonitorContainer struct {
 	App               domain.AppSpec
 	Deploy            domain.AppDeploy
 	TraefikConfigFile string
-	Version           string
 }
 
-func NewMonitorContainer(containerId string) MonitorContainer {
-	container := MonitorContainer{
+func NewMonitorContainer(containerId string) *MonitorContainer {
+	container := &MonitorContainer{
 		ContainerId: containerId,
 	}
+
+	err := container.findApp()
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+	container.TraefikConfigFile = container.getTraefikConfigFile()
 	return container
 }
 
-func (m *MonitorContainer) findApp() {
+func (m *MonitorContainer) findApp() error {
 	containerInfo, err := docker.InspectContainer(m.ContainerId)
 	if err != nil {
-		fmt.Print(err)
-		return
+		return err
 	}
 
 	labels := containerInfo.Config.Labels
 
 	namespace, exists := labels["dockflow.namespace"]
 	if !exists || namespace == "" {
-		return
+		return fmt.Errorf("namespace [%s] not set", namespace)
 		// return nil, &containerInfo, fmt.Errorf("namespace [%s] not set", namespace)
 	}
 
 	name, exists := labels["dockflow.name"]
 	if !exists || name == "" {
-		return
+		return fmt.Errorf("app name [%s] not set", name)
 		// return nil, &containerInfo, fmt.Errorf("app name [%s] not set", name)
 	}
 
 	version, exists := labels["dockflow.version"]
 	if !exists || version == "" {
-		return
+		return fmt.Errorf("app version [%s] not set", version)
 		// return nil, &containerInfo, fmt.Errorf("app version [%s] not set", version)
 	}
 
 	ns, err := filesystem.LoadNamespace(namespace)
 	if err != nil {
-		return
+		return err
 		// return nil, &containerInfo, err
 	}
 	if ns == nil {
-		return
+		return fmt.Errorf("namespace [%s] not found", err)
 		// return nil, &containerInfo, fmt.Errorf("namespace [%s] not found", err)
 	}
 
@@ -69,11 +74,11 @@ func (m *MonitorContainer) findApp() {
 		return app.Name == name
 	})
 	if !found {
-		return
+		return fmt.Errorf("app [%s] not found", app.Name)
 		// return nil, &containerInfo, fmt.Errorf("app [%s] not found", app.Name)
 	}
 	if app.Name == "" {
-		return
+		return fmt.Errorf("app [%s] not found", app.Name)
 		// return nil, &containerInfo, fmt.Errorf("app [%s] not found", app.Name)
 	}
 
@@ -81,24 +86,28 @@ func (m *MonitorContainer) findApp() {
 		return deploy.Version == version
 	})
 	if !found {
-		return
+		return fmt.Errorf("deploy version [%s] not found", version)
 	}
 
 	m.App = app
 	m.ContainerInfo = containerInfo
 	m.Deploy = deploy
+	return nil
 }
 
 func (m *MonitorContainer) onStart() {
 	log.Println("[container onStart]", m.ContainerId)
-	m.findApp()
-	m.TraefikConfigFile = filesystem.TraefikCfgDir + "/" + m.App.Name + ".yaml"
 
 	traefikNetworkIp := ""
 	for networkName, network := range m.ContainerInfo.NetworkSettings.Networks {
 		if networkName == "dockflow-traefik" {
 			traefikNetworkIp = network.IPAddress
 		}
+	}
+
+	if traefikNetworkIp == "" {
+		log.Println("[traefik] container not in dockflow-traefik network")
+		return
 	}
 
 	cfg, err := domain.NewTraefikConfig(m.TraefikConfigFile)
@@ -127,4 +136,23 @@ func (m *MonitorContainer) onStart() {
 func (m *MonitorContainer) onDie() {
 	log.Println("[container onDie]", m.ContainerId)
 	os.Remove(m.TraefikConfigFile)
+	// cfg, err := domain.NewTraefikConfig(m.TraefikConfigFile)
+	// if err != nil {
+	// 	log.Println("[traefik]      ", err)
+	// 	return
+	// }
+
+	// for _, url := range m.App.URLs {
+	// 	cfg.RemoveService(m.App.Name + "_" + m.Deploy.Version + "_" + url.Port)
+	// }
+
+	// cfg.Save()
+
+	// if len(cfg.HTTP.Routers) == 0 && len(cfg.HTTP.Services) == 0 {
+	// 	_ = os.Remove(m.TraefikConfigFile)
+	// }
+}
+
+func (m *MonitorContainer) getTraefikConfigFile() string {
+	return filesystem.TraefikCfgDir + "/" + m.App.Name + "_" + m.Deploy.Version + ".yaml"
 }
