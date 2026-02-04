@@ -27,7 +27,7 @@ func NewMonitorContainer(containerId string) *MonitorContainer {
 
 	err := container.findApp()
 	if err != nil {
-		fmt.Println(err)
+		log.Println("[error]", err)
 		return nil
 	}
 	container.TraefikConfigFile = container.getTraefikConfigFile()
@@ -45,29 +45,24 @@ func (m *MonitorContainer) findApp() error {
 	namespace, exists := labels["dockflow.namespace"]
 	if !exists || namespace == "" {
 		return fmt.Errorf("namespace [%s] not set", namespace)
-		// return nil, &containerInfo, fmt.Errorf("namespace [%s] not set", namespace)
 	}
 
 	name, exists := labels["dockflow.name"]
 	if !exists || name == "" {
 		return fmt.Errorf("app name [%s] not set", name)
-		// return nil, &containerInfo, fmt.Errorf("app name [%s] not set", name)
 	}
 
 	version, exists := labels["dockflow.version"]
 	if !exists || version == "" {
 		return fmt.Errorf("app version [%s] not set", version)
-		// return nil, &containerInfo, fmt.Errorf("app version [%s] not set", version)
 	}
 
 	ns, err := filesystem.LoadNamespace(namespace)
 	if err != nil {
 		return err
-		// return nil, &containerInfo, err
 	}
 	if ns == nil {
 		return fmt.Errorf("namespace [%s] not found", err)
-		// return nil, &containerInfo, fmt.Errorf("namespace [%s] not found", err)
 	}
 
 	app, found := lo.Find(ns.App, func(app domain.AppSpec) bool {
@@ -75,11 +70,9 @@ func (m *MonitorContainer) findApp() error {
 	})
 	if !found {
 		return fmt.Errorf("app [%s] not found", app.Name)
-		// return nil, &containerInfo, fmt.Errorf("app [%s] not found", app.Name)
 	}
 	if app.Name == "" {
 		return fmt.Errorf("app [%s] not found", app.Name)
-		// return nil, &containerInfo, fmt.Errorf("app [%s] not found", app.Name)
 	}
 
 	deploy, found := lo.Find(app.Deploy, func(deploy domain.AppDeploy) bool {
