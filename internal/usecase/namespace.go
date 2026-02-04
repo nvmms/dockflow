@@ -5,7 +5,6 @@ import (
 
 	"dockflow/internal/domain"
 	"dockflow/internal/service/docker"
-	"dockflow/internal/service/filesystem"
 	"dockflow/internal/util"
 )
 
@@ -16,12 +15,12 @@ var (
 
 func CreateNamespace(name string) (*domain.Namespace, error) {
 
-	namespace, err := filesystem.LoadNamespace(name)
+	namespace, err := domain.NewNamespace(name)
 	if err == nil && namespace != nil {
 		return nil, ErrNamespaceExists
 	}
 
-	namespaces := filesystem.ListNamespaces()
+	namespaces := domain.ListNamespaces()
 
 	subnet, gateway, err := util.AllocateSubnet(namespaces)
 	if err != nil {
@@ -47,7 +46,7 @@ func CreateNamespace(name string) (*domain.Namespace, error) {
 	}
 	ns.NetworkId = networkId
 
-	if err := filesystem.SaveNamespace(*ns); err != nil {
+	if err := ns.Save(); err != nil {
 		return nil, err
 	}
 
@@ -55,14 +54,14 @@ func CreateNamespace(name string) (*domain.Namespace, error) {
 }
 
 func ListNamespace() []domain.Namespace {
-	return filesystem.ListNamespaces()
+	return domain.ListNamespaces()
 }
 
 func InspectNamespace(
 	name string,
 ) (*domain.Namespace, error) {
 
-	ns, err := filesystem.LoadNamespace(name)
+	ns, err := domain.NewNamespace(name)
 	if err != nil {
 		// if filesystem.DirExists() {
 		// 	return nil, ErrNamespaceNotFound
@@ -74,7 +73,7 @@ func InspectNamespace(
 
 func RemoveNamespace(name string) error {
 
-	ns, err := filesystem.LoadNamespace(name)
+	ns, err := domain.NewNamespace(name)
 	if err != nil {
 		return ErrNamespaceNotFound
 	}
@@ -85,5 +84,5 @@ func RemoveNamespace(name string) error {
 	}
 
 	// 再删本地状态
-	return filesystem.RemoveNamespace(name)
+	return ns.Remove()
 }

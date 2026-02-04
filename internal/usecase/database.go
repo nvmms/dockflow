@@ -23,7 +23,7 @@ var (
 )
 
 func Createdatabase(database domain.DatabaseSpec) error {
-	ns, err := filesystem.LoadNamespace(database.Namespace)
+	ns, err := domain.NewNamespace(database.Namespace)
 	if err != nil {
 		return err
 	}
@@ -87,13 +87,13 @@ func Createdatabase(database domain.DatabaseSpec) error {
 	database.ContainerId = containerId
 	database.Ip = ips
 	ns.Database = append(ns.Database, database)
-	filesystem.SaveNamespace(*ns)
+	ns.Save()
 
 	return nil
 }
 
 func Listdatabase(namespaceName string) ([]domain.DatabaseSpec, error) {
-	ns, err := filesystem.LoadNamespace(namespaceName)
+	ns, err := domain.NewNamespace(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func Listdatabase(namespaceName string) ([]domain.DatabaseSpec, error) {
 }
 
 func Removedatabase(namespaceName string, databaseContainerName string) error {
-	ns, err := filesystem.LoadNamespace(namespaceName)
+	ns, err := domain.NewNamespace(namespaceName)
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func Removedatabase(namespaceName string, databaseContainerName string) error {
 	ns.Database = lo.Filter(ns.Database, func(item domain.DatabaseSpec, i int) bool {
 		return index != i
 	})
-	filesystem.SaveNamespace(*ns)
+	ns.Save()
 
 	return nil
 }
@@ -210,7 +210,7 @@ func detectDatabaseType(database domain.DatabaseSpec, opt *docker.ContainerRunOp
 }
 
 func ExportSQL(namespace, name string) error {
-	ns, err := filesystem.LoadNamespace(namespace)
+	ns, err := domain.NewNamespace(namespace)
 	if err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ func ExportSQL(namespace, name string) error {
 }
 
 func ImportSQL(namespace, name, sqlPath string) error {
-	ns, err := filesystem.LoadNamespace(namespace)
+	ns, err := domain.NewNamespace(namespace)
 	if err != nil {
 		return err
 	}

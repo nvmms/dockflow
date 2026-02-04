@@ -57,7 +57,7 @@ func (m *MonitorContainer) findApp() error {
 		return fmt.Errorf("app version [%s] not set", version)
 	}
 
-	ns, err := filesystem.LoadNamespace(namespace)
+	ns, err := domain.NewNamespace(namespace)
 	if err != nil {
 		return err
 	}

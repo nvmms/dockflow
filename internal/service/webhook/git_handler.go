@@ -1,7 +1,7 @@
 package webhook
 
 import (
-	"dockflow/internal/service/filesystem"
+	"dockflow/internal/domain"
 	"io"
 	"log"
 	"net/http"
@@ -31,7 +31,7 @@ func (s *GitService) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ns, err := filesystem.LoadNamespace(nsName)
+	ns, err := domain.NewNamespace(nsName)
 	if err != nil {
 		log.Println("[webhook][error]", err)
 		w.WriteHeader(http.StatusNotFound)

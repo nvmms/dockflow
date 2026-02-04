@@ -1,7 +1,7 @@
 package webhook
 
 import (
-	"dockflow/internal/service/filesystem"
+	"dockflow/internal/domain"
 	"dockflow/internal/usecase"
 	"log"
 	"path/filepath"
@@ -59,7 +59,7 @@ func (s *GitService) Handle(event GitPushEvent) {
 		"commit=", event.Commit,
 	)
 
-	ns, err := filesystem.LoadNamespace(event.Namespace)
+	ns, err := domain.NewNamespace(event.Namespace)
 	if err != nil {
 		log.Println("[webhook][error]", err)
 		return

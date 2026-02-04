@@ -3,7 +3,6 @@ package usecase
 import (
 	"dockflow/internal/domain"
 	"dockflow/internal/service"
-	"dockflow/internal/service/filesystem"
 	"errors"
 	"fmt"
 
@@ -19,7 +18,7 @@ var (
 
 func CreateApp(app domain.AppSpec) error {
 	// ---------- load namespace ----------
-	ns, err := filesystem.LoadNamespace(app.Namespace)
+	ns, err := domain.NewNamespace(app.Namespace)
 	if err != nil {
 		return err
 	}
@@ -81,7 +80,7 @@ func CreateApp(app domain.AppSpec) error {
 	// ---------- append & save ----------
 	ns.App = append(ns.App, app)
 
-	if err := filesystem.SaveNamespace(*ns); err != nil {
+	if err := ns.Save(); err != nil {
 		return err
 	}
 
@@ -89,7 +88,7 @@ func CreateApp(app domain.AppSpec) error {
 }
 
 func ListApp(ns string) ([]domain.AppSpec, error) {
-	namespace, err := filesystem.LoadNamespace(ns)
+	namespace, err := domain.NewNamespace(ns)
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +108,7 @@ type DeployAppOptions struct {
 }
 
 func DeployApp(opt DeployAppOptions) error {
-
-	namespace, err := filesystem.LoadNamespace(opt.Namespace)
+	namespace, err := domain.NewNamespace(opt.Namespace)
 	if err != nil {
 		return err
 	}

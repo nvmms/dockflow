@@ -100,7 +100,7 @@ func (d *AppDeployer) Deploy(branch, commit, tag *string) error {
 //
 
 func loadNamespace(namespace string) (*domain.Namespace, error) {
-	ns, err := filesystem.LoadNamespace(namespace)
+	ns, err := domain.NewNamespace(namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func (d *AppDeployer) deployVersion(
 		Url:         "/" + version,
 	})
 
-	return filesystem.SaveApp(*d.app)
+	return domain.SaveApp(*d.app)
 }
 
 //
@@ -294,7 +294,7 @@ func (d *AppDeployer) cleanupOldContainer(version string) error {
 		d.app.Deploy = append(d.app.Deploy[:i], d.app.Deploy[i+1:]...)
 	}
 
-	return filesystem.SaveApp(*d.app)
+	return domain.SaveApp(*d.app)
 }
 
 //

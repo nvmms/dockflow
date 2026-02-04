@@ -3,7 +3,6 @@ package usecase
 import (
 	"dockflow/internal/domain"
 	"dockflow/internal/service/docker"
-	"dockflow/internal/service/filesystem"
 	"errors"
 )
 
@@ -14,8 +13,7 @@ var (
 )
 
 func CreateRedis(redis domain.RedisSpec) error {
-
-	ns, err := filesystem.LoadNamespace(redis.Namespace)
+	ns, err := domain.NewNamespace(redis.Namespace)
 	if err != nil {
 		return err
 	}
@@ -71,13 +69,13 @@ func CreateRedis(redis domain.RedisSpec) error {
 	redis.ContainerId = containerId
 	redis.Ip = ips
 	ns.Redis = append(ns.Redis, redis)
-	filesystem.SaveNamespace(*ns)
+	ns.Save()
 
 	return nil
 }
 
 func ListRedis(namespaceName string) ([]domain.RedisSpec, error) {
-	ns, err := filesystem.LoadNamespace(namespaceName)
+	ns, err := domain.NewNamespace(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +87,7 @@ func ListRedis(namespaceName string) ([]domain.RedisSpec, error) {
 }
 
 func RemoveRedis(namespaceName string, redisContainerName string) error {
-	ns, err := filesystem.LoadNamespace(namespaceName)
+	ns, err := domain.NewNamespace(namespaceName)
 	if err != nil {
 		return err
 	}
@@ -127,7 +125,7 @@ func RemoveRedis(namespaceName string, redisContainerName string) error {
 	}
 
 	ns.Redis = remove(ns.Redis, index)
-	filesystem.SaveNamespace(*ns)
+	ns.Save()
 
 	return nil
 
