@@ -2,19 +2,18 @@ package filesystem
 
 import (
 	"os"
-	"path/filepath"
 )
 
 const (
 	CfgDir              = "/etc/dockflow/"
 	CfgPath             = CfgDir + "dockflow.yaml"
 	CfgScriptDir        = CfgDir + "script/"
-	TraefikCfgDir       = CfgDir + "/traefik/dynamic"
 	TraefikMainCfg      = CfgDir + "/traefik/traefik.yml"
 	TraefikAcmeCfg      = CfgDir + "/traefik/acme.json"
 	MySqlInitScript     = CfgScriptDir + "mysql_init_script.sql"
 	PgSqlInitScript     = CfgScriptDir + "pgsql_init_script.sql"
 	BaseDirName         = "/var/lib/dockflow"
+	TraefikCfgDir       = BaseDirName + "/traefik/dynamic"
 	NamespaceDirName    = BaseDirName + "/namespace"
 	BuildDockerfilePath = BaseDirName + "/build-templates/Dockerfile."
 )
@@ -26,17 +25,18 @@ func PrepareWorkspace() error {
 	}
 
 	// 2. sub dirs
-	dirs := []string{
-		"state",
-		"cache",
-		"logs",
-	}
+	// dirs := []string{
+	// 	"state",
+	// 	"cache",
+	// 	"logs",
+	// 	"dynamic",
+	// }
 
-	for _, d := range dirs {
-		if err := os.MkdirAll(filepath.Join(BaseDirName, d), 0755); err != nil {
-			return err
-		}
-	}
+	// for _, d := range dirs {
+	// 	if err := os.MkdirAll(filepath.Join(BaseDirName, d), 0755); err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	// 3. dockflow.yaml
 	// cfgPath := filepath.Join(BaseDirName, "dockflow.yaml")

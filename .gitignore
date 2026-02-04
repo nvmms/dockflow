@@ -2,3 +2,5 @@ dist/**
 pkg/usr/bin/**
 *.deb
 pkg/etc/dockflow/traefik/dynamic/**
+pkg/var/lib/dockflow/namespace/**
+pkg/var/lib/dockflow/traefik/dynamic/**
