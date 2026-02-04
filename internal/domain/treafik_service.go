@@ -8,6 +8,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+/* ---------- Root ---------- */
+
 type TraefikConfig struct {
 	Path string     `yaml:"-"`
 	HTTP HTTPConfig `yaml:"http"`
@@ -21,9 +23,15 @@ type HTTPConfig struct {
 /* ---------- Router ---------- */
 
 type Router struct {
-	Rule        string   `yaml:"rule"`
-	Service     string   `yaml:"service"`
-	Middlewares []string `yaml:"middlewares,omitempty"`
+	Rule        string     `yaml:"rule"`
+	Service     string     `yaml:"service"`
+	EntryPoints []string   `yaml:"entryPoints,omitempty"`
+	Middlewares []string   `yaml:"middlewares,omitempty"`
+	TLS         *TLSConfig `yaml:"tls,omitempty"`
+}
+
+type TLSConfig struct {
+	CertResolver string `yaml:"certResolver,omitempty"`
 }
 
 /* ---------- Service ---------- */
@@ -40,18 +48,23 @@ type Servers struct {
 	URL string `yaml:"url"`
 }
 
+/* ---------- Options ---------- */
+
 type TraefikServiceOpt struct {
-	Name string
-	Rule string
-	Url  string
+	Name         string
+	Rule         string
+	Url          string
+	EnableTLS    bool   // 是否启用 HTTPS
+	CertResolver string // 如：le
 }
 
-/* ---------- func ---------- */
+/* ---------- Constructor ---------- */
 
 func NewTraefikConfig(path string) (*TraefikConfig, error) {
 	c := &TraefikConfig{
 		Path: path,
 	}
+
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			c.HTTP = HTTPConfig{
@@ -62,12 +75,15 @@ func NewTraefikConfig(path string) (*TraefikConfig, error) {
 		}
 		return nil, err
 	}
-	err := c.Load()
-	if err != nil {
+
+	if err := c.Load(); err != nil {
 		return nil, err
 	}
+
 	return c, nil
 }
+
+/* ---------- Load / Save ---------- */
 
 func (c *TraefikConfig) Load() error {
 	data, err := os.ReadFile(c.Path)
@@ -90,33 +106,6 @@ func (c *TraefikConfig) Load() error {
 	return nil
 }
 
-func (c *TraefikConfig) AddService(opt TraefikServiceOpt) {
-	if c.HTTP.Routers == nil {
-		c.HTTP.Routers = make(map[string]Router)
-	}
-	if c.HTTP.Services == nil {
-		c.HTTP.Services = make(map[string]Service)
-	}
-
-	routerName := "app-" + opt.Name
-	serviceName := "svc-" + opt.Name
-
-	c.HTTP.Routers[routerName] = Router{
-		Rule:    normalizeRule(opt.Rule),
-		Service: serviceName,
-	}
-
-	c.HTTP.Services[serviceName] = Service{
-		LoadBalancer: &LoadBalancer{
-			Servers: []Servers{
-				{
-					URL: normalizeURL(opt.Url),
-				},
-			},
-		},
-	}
-}
-
 func (c *TraefikConfig) Save() error {
 	if c.Path == "" {
 		return fmt.Errorf("traefik config path is empty")
@@ -135,6 +124,52 @@ func (c *TraefikConfig) Save() error {
 	return os.Rename(tmp, c.Path)
 }
 
+/* ---------- Core Logic ---------- */
+
+func (c *TraefikConfig) AddService(opt TraefikServiceOpt) {
+	if c.HTTP.Routers == nil {
+		c.HTTP.Routers = make(map[string]Router)
+	}
+	if c.HTTP.Services == nil {
+		c.HTTP.Services = make(map[string]Service)
+	}
+
+	routerName := "app-" + opt.Name
+	serviceName := "svc-" + opt.Name
+
+	router := Router{
+		Rule:    normalizeRule(opt.Rule),
+		Service: serviceName,
+	}
+
+	if opt.EnableTLS {
+		router.EntryPoints = []string{"websecure"}
+		if opt.CertResolver == "" {
+			router.TLS = &TLSConfig{
+				CertResolver: "letsencrypt",
+			}
+		} else {
+			router.TLS = &TLSConfig{
+				CertResolver: opt.CertResolver,
+			}
+		}
+	} else {
+		router.EntryPoints = []string{"web"}
+	}
+
+	c.HTTP.Routers[routerName] = router
+
+	c.HTTP.Services[serviceName] = Service{
+		LoadBalancer: &LoadBalancer{
+			Servers: []Servers{
+				{
+					URL: normalizeURL(opt.Url),
+				},
+			},
+		},
+	}
+}
+
 func (c *TraefikConfig) RemoveService(name string) {
 	if c.HTTP.Routers != nil {
 		delete(c.HTTP.Routers, "app-"+name)
@@ -147,10 +182,12 @@ func (c *TraefikConfig) RemoveService(name string) {
 
 func (c *TraefikConfig) DebugPrint() {}
 
+/* ---------- Helpers ---------- */
+
 func normalizeRule(rule string) string {
 	rule = strings.TrimSpace(rule)
 
-	// 已经是 Traefik Rule，直接放行（兜底）
+	// 已经是 Traefik Rule，直接放行
 	if strings.Contains(rule, "Host(") {
 		return rule
 	}
@@ -179,11 +216,9 @@ func normalizeURL(raw string) string {
 		return raw
 	}
 
-	// 已经有协议，直接返回
 	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
 		return raw
 	}
 
-	// 否则默认补 http://
 	return "http://" + raw
 }
