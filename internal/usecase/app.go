@@ -1,9 +1,12 @@
 package usecase
 
 import (
+	"dockflow/internal/config"
 	"dockflow/internal/domain"
 	"dockflow/internal/service"
 	"dockflow/internal/service/docker"
+	"dockflow/internal/service/git"
+	"dockflow/internal/util"
 	"errors"
 	"fmt"
 
@@ -76,6 +79,31 @@ func CreateApp(app domain.AppSpec) error {
 		if u.Port == "" {
 			return fmt.Errorf("service url port is empty")
 		}
+	}
+
+	app.Secret = util.GenerateRandomString(32)
+	gitinfo, err := domain.NewGitUrl(app.Repo)
+	if err != nil {
+		return err
+	}
+
+	_token := app.Token
+	if _token == "" {
+		_token, err = config.FindGit(gitinfo.Host, gitinfo.Username)
+		if err != nil {
+			return err
+		}
+	}
+
+	opt := git.WebhookOption{
+		Repo:        app.Repo,
+		Secret:      app.Secret,
+		Token:       _token,
+		CallbackURL: fmt.Sprintf("http://117.50.200.150:8090/webhook/git/%s/%s", gitinfo.Username, gitinfo.Repo),
+	}
+	err = git.NormalizeWebhookOption(opt)
+	if err != nil {
+		return err
 	}
 
 	// ---------- append & save ----------
