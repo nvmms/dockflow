@@ -17,6 +17,7 @@ case "$1" in
     if [ -d /etc/dockflow ]; then
         chown -R root:dockflow /etc/dockflow
         chmod -R g+rwX /etc/dockflow
+        chmod -R 600 /etc/dockflow/traefik/acme.json
     fi
 
     echo ""
