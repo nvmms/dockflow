@@ -181,8 +181,6 @@ var appListCmd = &cobra.Command{
 	},
 }
 
-var appRemoveCmd = &cobra.Command{}
-
 var appDeployCmd = &cobra.Command{
 	Use:   "deploy <namespace> <name>",
 	Short: "deploy app instance",
@@ -213,3 +211,19 @@ var appDeployCmd = &cobra.Command{
 }
 var appLogCmd = &cobra.Command{}
 var appStatusCmd = &cobra.Command{}
+
+var appRemoveCmd = &cobra.Command{
+	Use:     "remove <namespace> <name>",
+	Short:   "remove app instance",
+	Aliases: []string{"rm"},
+	Args:    cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		namespace := args[0]
+		app := args[1]
+		err := usecase.RemoveApp(namespace, app)
+		if err != nil {
+			return err
+		}
+		return nil
+	},
+}

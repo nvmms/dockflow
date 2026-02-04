@@ -3,6 +3,7 @@ package usecase
 import (
 	"dockflow/internal/domain"
 	"dockflow/internal/service"
+	"dockflow/internal/service/docker"
 	"errors"
 	"fmt"
 
@@ -132,4 +133,33 @@ func DeployApp(opt DeployAppOptions) error {
 	}
 
 	return fmt.Errorf("app name [%s] not found", opt.Name)
+}
+
+func RemoveApp(nsName, appName string) error {
+	ns, err := domain.NewNamespace(nsName)
+	if err != nil {
+		return err
+	}
+	if ns == nil {
+		return ErrNamespaceNotFound
+	}
+
+	app, found := ns.FindApp(appName)
+	if !found {
+		return ErrAppNotFound
+	}
+
+	for _, deploy := range app.Deploy {
+		err := docker.StopContainer(deploy.ContainerId, nil)
+		if err != nil {
+			return err
+		}
+		err = docker.RemoveContainer(deploy.ContainerId, true)
+		if err != nil {
+			return err
+		}
+	}
+
+	ns.RemoveApp(appName)
+	return nil
 }
