@@ -1,13 +1,10 @@
 package traefik
 
 import (
-	"bufio"
 	"dockflow/internal/config"
 	"dockflow/internal/service/docker"
 	"dockflow/internal/service/filesystem"
-	"fmt"
 	"log"
-	"os"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
@@ -26,12 +23,12 @@ func Init() error {
 		return err
 	}
 
-	email, err := ensureAcmeEmail(cfg)
-	if err != nil {
-		return err
-	}
+	// email, err := ensureAcmeEmail(cfg)
+	// if err != nil {
+	// 	return err
+	// }
 
-	config.Save(cfg)
+	// config.Save(cfg)
 
 	// if err := system.CheckPorts(80, 443); err != nil {
 	// 	return err
@@ -45,41 +42,41 @@ func Init() error {
 		return err
 	}
 
-	if err := ensureContainer(cfg, email); err != nil {
+	if err := ensureContainer(cfg); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func ensureAcmeEmail(cfg *config.Config) (string, error) {
-	email := strings.TrimSpace(cfg.Platform.Traefik.AcmeEmail)
-	if email != "" {
-		return email, nil
-	}
+// func ensureAcmeEmail(cfg *config.Config) (string, error) {
+// 	email := strings.TrimSpace(cfg.Platform.Traefik.AcmeEmail)
+// 	if email != "" {
+// 		return email, nil
+// 	}
 
-	in := bufio.NewReader(os.Stdin)
+// 	in := bufio.NewReader(os.Stdin)
 
-	for {
-		fmt.Print("Enter email for Let's Encrypt (ACME): ")
-		line, err := in.ReadString('\n')
-		if err != nil {
-			return "", err
-		}
+// 	for {
+// 		fmt.Print("Enter email for Let's Encrypt (ACME): ")
+// 		line, err := in.ReadString('\n')
+// 		if err != nil {
+// 			return "", err
+// 		}
 
-		email = strings.TrimSpace(line)
-		if email == "" || !strings.Contains(email, "@") {
-			fmt.Println("Invalid email, please try again.")
-			continue
-		}
+// 		email = strings.TrimSpace(line)
+// 		if email == "" || !strings.Contains(email, "@") {
+// 			fmt.Println("Invalid email, please try again.")
+// 			continue
+// 		}
 
-		cfg.Platform.Traefik.AcmeEmail = email
-		if err := config.Save(cfg); err != nil {
-			return "", err
-		}
-		return email, nil
-	}
-}
+// 		cfg.Platform.Traefik.AcmeEmail = email
+// 		if err := config.Save(cfg); err != nil {
+// 			return "", err
+// 		}
+// 		return email, nil
+// 	}
+// }
 
 func ensureNetwork(cfg *config.Config) (err error) {
 	log.Println("[dockflow init]", "create traefik network")
@@ -130,11 +127,11 @@ func createTraefikNetwork(cfg *config.Config) (string, error) {
 	return networkId, nil
 }
 
-func ensureContainer(cfg *config.Config, acmeEmail string) (err error) {
+func ensureContainer(cfg *config.Config) (err error) {
 	containerId := strings.TrimSpace(cfg.Platform.Traefik.ContainerId)
 
 	if containerId == "" {
-		containerId, err = createTraefikContainer(acmeEmail)
+		containerId, err = createTraefikContainer()
 		if err != nil {
 			panic(err)
 			// err = docker.StopContainer(containerId, nil)
@@ -155,7 +152,7 @@ func ensureContainer(cfg *config.Config, acmeEmail string) (err error) {
 			panic(err)
 		}
 		if containerId == "" {
-			containerId, err = createTraefikContainer(acmeEmail)
+			containerId, err = createTraefikContainer()
 			cfg.Platform.Traefik.ContainerId = containerId
 			config.Save(cfg)
 		} else {
@@ -176,7 +173,7 @@ func ensureContainer(cfg *config.Config, acmeEmail string) (err error) {
 	return nil
 }
 
-func createTraefikContainer(acmeEmail string) (containerId string, err error) {
+func createTraefikContainer() (containerId string, err error) {
 
 	opt := docker.NewRunOptions(TraefikContainerName, TraefikImage)
 
@@ -190,8 +187,6 @@ func createTraefikContainer(acmeEmail string) (containerId string, err error) {
 	opt.WithVolume(filesystem.TraefikMainCfg, "/etc/traefik/traefik.yml", "ro")
 	opt.WithVolume(filesystem.TraefikCfgDir, "/etc/traefik/dynamic", "ro")
 	opt.WithVolume(filesystem.TraefikAcmeCfg, "/var/lib/traefik/acme.json", "rw")
-
-	opt.WithEnv("TRAEFIK_ACME_EMAIL", acmeEmail)
 
 	opt.WithCommand(
 		"--configFile=/etc/traefik/traefik.yml",

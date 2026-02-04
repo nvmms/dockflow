@@ -1,7 +1,6 @@
 version: v0.1
 platform:
     traefik:
-        acmeEmail: 
         containerId: 
         networkId: 
 

@@ -20,7 +20,7 @@ type Platform struct {
 }
 
 type Traefik struct {
-	AcmeEmail   string `yaml:"acmeEmail"`
+	// AcmeEmail   string `yaml:"acmeEmail"`
 	ContainerId string `yaml:"containerId"`
 	NetworkId   string `yaml:"networkId"`
 }
