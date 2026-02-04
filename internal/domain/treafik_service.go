@@ -16,8 +16,9 @@ type TraefikConfig struct {
 }
 
 type HTTPConfig struct {
-	Routers  map[string]Router  `yaml:"routers"`
-	Services map[string]Service `yaml:"services"`
+	Routers     map[string]Router     `yaml:"routers"`
+	Services    map[string]Service    `yaml:"services"`
+	Middlewares map[string]Middleware `yaml:"middlewares,omitempty"`
 }
 
 /* ---------- Router ---------- */
@@ -48,14 +49,29 @@ type Servers struct {
 	URL string `yaml:"url"`
 }
 
+/* ---------- Middleware ---------- */
+
+type Middleware struct {
+	StripPrefix      *StripPrefix      `yaml:"stripPrefix,omitempty"`
+	StripPrefixRegex *StripPrefixRegex `yaml:"stripPrefixRegex,omitempty"`
+}
+
+type StripPrefix struct {
+	Prefixes []string `yaml:"prefixes"`
+}
+
+type StripPrefixRegex struct {
+	Regex []string `yaml:"regex"`
+}
+
 /* ---------- Options ---------- */
 
 type TraefikServiceOpt struct {
 	Name         string
 	Rule         string
 	Url          string
-	EnableTLS    bool   // 是否启用 HTTPS
-	CertResolver string // 如：le
+	EnableTLS    bool
+	CertResolver string
 }
 
 /* ---------- Constructor ---------- */
@@ -68,8 +84,9 @@ func NewTraefikConfig(path string) (*TraefikConfig, error) {
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			c.HTTP = HTTPConfig{
-				Routers:  make(map[string]Router),
-				Services: make(map[string]Service),
+				Routers:     make(map[string]Router),
+				Services:    make(map[string]Service),
+				Middlewares: make(map[string]Middleware),
 			}
 			return c, nil
 		}
@@ -102,6 +119,9 @@ func (c *TraefikConfig) Load() error {
 	if c.HTTP.Services == nil {
 		c.HTTP.Services = make(map[string]Service)
 	}
+	if c.HTTP.Middlewares == nil {
+		c.HTTP.Middlewares = make(map[string]Middleware)
+	}
 
 	return nil
 }
@@ -133,28 +153,42 @@ func (c *TraefikConfig) AddService(opt TraefikServiceOpt) {
 	if c.HTTP.Services == nil {
 		c.HTTP.Services = make(map[string]Service)
 	}
+	if c.HTTP.Middlewares == nil {
+		c.HTTP.Middlewares = make(map[string]Middleware)
+	}
 
 	routerName := "app-" + opt.Name
 	serviceName := "svc-" + opt.Name
+	middlewareName := "mw-strip-" + opt.Name
+
+	rule := normalizeRule(opt.Rule)
 
 	router := Router{
-		Rule:    normalizeRule(opt.Rule),
+		Rule:    rule,
 		Service: serviceName,
 	}
 
+	// EntryPoints / TLS
 	if opt.EnableTLS {
 		router.EntryPoints = []string{"websecure"}
 		if opt.CertResolver == "" {
-			router.TLS = &TLSConfig{
-				CertResolver: "letsencrypt",
-			}
+			router.TLS = &TLSConfig{CertResolver: "letsencrypt"}
 		} else {
-			router.TLS = &TLSConfig{
-				CertResolver: opt.CertResolver,
-			}
+			router.TLS = &TLSConfig{CertResolver: opt.CertResolver}
 		}
 	} else {
 		router.EntryPoints = []string{"web"}
+	}
+
+	// === 自动 strip path ===
+	if path := extractPathFromRule(opt.Rule); path != "" {
+		c.HTTP.Middlewares[middlewareName] = Middleware{
+			StripPrefix: &StripPrefix{
+				Prefixes: []string{path},
+			},
+		}
+
+		router.Middlewares = []string{middlewareName}
 	}
 
 	c.HTTP.Routers[routerName] = router
@@ -174,13 +208,13 @@ func (c *TraefikConfig) RemoveService(name string) {
 	if c.HTTP.Routers != nil {
 		delete(c.HTTP.Routers, "app-"+name)
 	}
-
 	if c.HTTP.Services != nil {
 		delete(c.HTTP.Services, "svc-"+name)
 	}
+	if c.HTTP.Middlewares != nil {
+		delete(c.HTTP.Middlewares, "mw-strip-"+name)
+	}
 }
-
-func (c *TraefikConfig) DebugPrint() {}
 
 /* ---------- Helpers ---------- */
 
@@ -209,6 +243,21 @@ func normalizeRule(rule string) string {
 		host,
 		path,
 	)
+}
+
+func extractPathFromRule(rule string) string {
+	rule = strings.TrimSpace(rule)
+
+	// 已经是完整 Traefik rule，不自动 strip
+	if strings.Contains(rule, "Host(") {
+		return ""
+	}
+
+	if idx := strings.Index(rule, "/"); idx != -1 {
+		return rule[idx:]
+	}
+
+	return ""
 }
 
 func normalizeURL(raw string) string {
