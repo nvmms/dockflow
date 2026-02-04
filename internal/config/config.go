@@ -10,9 +10,10 @@ import (
 )
 
 type Config struct {
-	Version  string   `yaml:"version"`
-	Platform Platform `yaml:"platform"`
-	Git      Git      `yaml:"git"`
+	Version    string   `yaml:"version"`
+	Platform   Platform `yaml:"platform"`
+	Git        Git      `yaml:"git"`
+	WebHookUrl string   `yaml:"webhook_url"`
 }
 
 type Platform struct {

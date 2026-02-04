@@ -9,6 +9,7 @@ import (
 	"dockflow/internal/util"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/samber/lo"
 )
@@ -81,29 +82,35 @@ func CreateApp(app domain.AppSpec) error {
 		}
 	}
 
-	app.Secret = util.GenerateRandomString(32)
-	gitinfo, err := domain.NewGitUrl(app.Repo)
+	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-
-	_token := app.Token
-	if _token == "" {
-		_token, err = config.FindGit(gitinfo.Host, gitinfo.Username)
+	if cfg.WebHookUrl != "" {
+		app.Secret = util.GenerateRandomString(32)
+		gitinfo, err := domain.NewGitUrl(app.Repo)
 		if err != nil {
 			return err
 		}
-	}
 
-	opt := git.WebhookOption{
-		Repo:        app.Repo,
-		Secret:      app.Secret,
-		Token:       _token,
-		CallbackURL: fmt.Sprintf("http://117.50.200.150:8090/webhook/git/%s/%s", gitinfo.Username, gitinfo.Repo),
-	}
-	err = git.NormalizeWebhookOption(opt)
-	if err != nil {
-		return err
+		_token := app.Token
+		if _token == "" {
+			_token, err = config.FindGit(gitinfo.Host, gitinfo.Username)
+			if err != nil {
+				return err
+			}
+		}
+
+		opt := git.WebhookOption{
+			Repo:        app.Repo,
+			Secret:      app.Secret,
+			Token:       _token,
+			CallbackURL: fmt.Sprintf("%s/%s/%s", strings.TrimSuffix(cfg.WebHookUrl, "/"), gitinfo.Username, gitinfo.Repo),
+		}
+		err = git.NormalizeWebhookOption(opt)
+		if err != nil {
+			return err
+		}
 	}
 
 	// ---------- append & save ----------
