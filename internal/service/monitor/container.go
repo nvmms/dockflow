@@ -113,9 +113,10 @@ func (m *MonitorContainer) onStart() {
 			rule += "/" + m.Deploy.Version
 		}
 		traefikOpt := domain.TraefikServiceOpt{
-			Name: m.App.Name + "_" + m.Deploy.Version + "_" + url.Port,
-			Rule: rule,
-			Url:  traefikNetworkIp + ":" + url.Port,
+			Name:      m.App.Name + "_" + m.Deploy.Version + "_" + url.Port,
+			Rule:      rule,
+			Url:       traefikNetworkIp + ":" + url.Port,
+			EnableTLS: true,
 		}
 		cfg.AddService(traefikOpt)
 	}
