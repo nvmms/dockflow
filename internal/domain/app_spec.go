@@ -33,4 +33,5 @@ type AppSpec struct {
 	URLs      []AppURL           `json:"url"`     // Access rules
 	Deploy    []AppDeploy        `json:"deploy"`
 	BuildArg  map[string]*string `json:"buildArg"`
+	Secret    string             `json:"secret"`
 }

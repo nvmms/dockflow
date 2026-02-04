@@ -206,6 +206,9 @@ func CheckoutCommit(repo *git.Repository, commit string) error {
 		return err
 	}
 
+	println(repo)
+	println(commit)
+
 	return wt.Checkout(&git.CheckoutOptions{
 		Hash:  plumbing.NewHash(commit),
 		Force: true,

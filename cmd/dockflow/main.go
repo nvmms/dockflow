@@ -4,6 +4,7 @@ import (
 	"context"
 	"dockflow/internal/cli"
 	"dockflow/internal/service/monitor"
+	"dockflow/internal/service/webhook"
 	"log"
 	"os"
 	"os/signal"
@@ -25,6 +26,10 @@ func runCLI() {
 
 func runDaemon() {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	gitService := webhook.NewGitService()
+	webhookServer := webhook.NewServer(":8090", gitService)
+	webhookServer.Start(ctx)
 
 	go monitor.ListenDockerEvents(ctx)
 
