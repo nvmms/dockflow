@@ -59,6 +59,9 @@ func handleContainerEvent(msg events.Message) {
 	action := msg.Action
 
 	containerMonitor := NewMonitorContainer(containerId)
+	if containerMonitor == nil {
+		return
+	}
 
 	switch action {
 	case "start":
