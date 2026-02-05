@@ -105,7 +105,7 @@ func CreateApp(app domain.AppSpec) error {
 			Repo:        app.Repo,
 			Secret:      app.Secret,
 			Token:       _token,
-			CallbackURL: fmt.Sprintf("%s/%s/%s", strings.TrimSuffix(cfg.WebHookUrl, "/"), gitinfo.Username, gitinfo.Repo),
+			CallbackURL: fmt.Sprintf("%s/%s/%s", strings.TrimSuffix(cfg.WebHookUrl, "/"), app.Namespace, app.Name),
 		}
 		err = git.NormalizeWebhookOption(opt)
 		if err != nil {
