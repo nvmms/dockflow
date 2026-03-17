@@ -20,25 +20,27 @@ func init() {
 	databaseCreateCmd.Flags().String("dbname", "", "")
 	databaseCreateCmd.Flags().String("dbtype", "mysql:5.7", "Database type mysql pgsql support")
 	databaseCreateCmd.Flags().Bool("remote", false, "open remote access, use random port bind mysql 3306")
-
-}
-
-var databaseCmd = &cobra.Command{
-	Use:   "database",
-	Short: "Manage database",
 }
 
 var (
-	ErrorUsernamBlock  = errors.New("username can't be block")
-	ErrorPasswordBlock = errors.New("password can't be block")
-	ErrorDbnameBlock   = errors.New("databasename can't be block")
+	ErrorUsernamBlock   = errors.New("username can't be block")
+	ErrorPasswordBlock  = errors.New("password can't be block")
+	ErrorDbnameBlock    = errors.New("databasename can't be block")
+	ErrorNameSpaceBlock = errors.New("Namespace can't be block")
+	namespace           = ""
 )
+
+var databaseCmd = &cobra.Command{
+	Use:     "database",
+	Aliases: []string{"db"},
+	Short:   "Manage database in the specified namespace",
+}
 
 var databaseCreateCmd = &cobra.Command{
 	Use:   "create <namespace> <name>",
-	Short: "Create redis instance",
+	Short: "Create database instance",
 	Args:  cobra.ExactArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		namespace := args[0]
 		name := args[1]
 
@@ -46,18 +48,15 @@ var databaseCreateCmd = &cobra.Command{
 		memory, _ := cmd.Flags().GetFloat64("memory")
 		username, _ := cmd.Flags().GetString("username")
 		if username == "" {
-			printError(ErrorUsernamBlock)
-			return
+			return ErrorUsernamBlock
 		}
 		password, _ := cmd.Flags().GetString("password")
 		if password == "" {
-			printError(ErrorPasswordBlock)
-			return
+			return ErrorPasswordBlock
 		}
 		dbname, _ := cmd.Flags().GetString("dbname")
 		if dbname == "" {
-			printError(ErrorDbnameBlock)
-			return
+			return ErrorDbnameBlock
 		}
 		dbtype, _ := cmd.Flags().GetString("dbtype")
 		remote, _ := cmd.Flags().GetBool("remote")
@@ -75,49 +74,43 @@ var databaseCreateCmd = &cobra.Command{
 		}
 		err := usecase.Createdatabase(database)
 		if err != nil {
-			printError(err)
+			return err
 		}
-
-		// aof, _ := cmd.Flags().GetBool("appendonly")
-		// policy, _ := cmd.Flags().GetString("maxmemory-policy")
-
-		// redisSpec := domain.NewRedisSpace(name, namespace, password, cpu, memory, version, aof, policy)
-
-		// err := usecase.CreateRedis(redisSpec)
-		// if err != nil {
-		// 	printError(err)
-		// }
+		return nil
 	},
 }
 
 var databaseListCmd = &cobra.Command{
 	Use:     "list <namespace>",
-	Short:   "List <namespace> redis",
+	Short:   "List database",
 	Aliases: []string{"ls"},
 	Args:    cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		namespace := args[0]
+
 		dbList, err := usecase.Listdatabase(namespace)
 		if err != nil {
-			printError(err)
+			return err
 		}
 		printDatabaseList(dbList)
-
+		return nil
 	},
 }
 
 var databaseRemoveCmd = &cobra.Command{
 	Use:     "remove <namespace> <name>",
-	Short:   "Remove <namespace> database",
+	Short:   "Remove database",
 	Aliases: []string{"rm"},
 	Args:    cobra.ExactArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		namespace := args[0]
-		redisName := args[1]
-		err := usecase.Removedatabase(namespace, redisName)
+		name := args[1]
+
+		err := usecase.Removedatabase(namespace, name)
 		if err != nil {
-			printError(err)
+			return err
 		}
+		return nil
 	},
 }
 
@@ -129,7 +122,7 @@ func printDatabaseList(list []domain.DatabaseSpec) {
 		fmt.Printf(
 			"%-12s %-8s %-8s %-10s\n",
 			db.Name,
-			db.DbType, // redis / mysql / pg
+			db.DbType, // mysql / pg
 		)
 	}
 }
