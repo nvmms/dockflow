@@ -9,7 +9,7 @@
 	// ],
 	// "postCreateCommand": "echo \"alias dockflow='go run ./cmd/dockflow/main.go'\" >> ~/.bashrc",
 	"features": {
-		"ghcr.io/devcontainers/features/docker-in-docker:2": {
+		"ghcr.io/devcontainers/features/docker-in-docker:3": {
 			"version": "latest",
 			"moby": false, // 关键：这里设为 false
 			"dockerDashComposeVersion": "v2"
