@@ -24,6 +24,7 @@ func NewHandler() http.Handler {
 	mux.HandleFunc("/api/v1/repositories", repositories)
 	mux.HandleFunc("/api/v1/repositories/", repositoryResource)
 	mux.HandleFunc("GET /api/v1/openapi.json", serveOpenAPI)
+	mux.Handle("/", spaHandler())
 	return recoverer(mux)
 }
 

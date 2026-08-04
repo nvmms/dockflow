@@ -22,7 +22,7 @@ func NewServer(addr string, gitService *GitService, api ...http.Handler) *Server
 	// git webhook
 	mux.HandleFunc("/webhook/git/", gitService.HandleWebhook)
 	if len(api) > 0 && api[0] != nil {
-		mux.Handle("/api/", api[0])
+		mux.Handle("/", api[0])
 	}
 
 	return &Server{

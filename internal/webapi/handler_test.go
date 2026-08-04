@@ -63,3 +63,15 @@ func TestMethodNotAllowed(t *testing.T) {
 		t.Fatalf("allow = %q", w.Header().Get("Allow"))
 	}
 }
+
+func TestManagementUI(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	NewHandler().ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Dockflow") {
+		t.Fatalf("management UI index was not served")
+	}
+}
