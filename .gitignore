@@ -4,3 +4,4 @@ pkg/usr/bin/**
 pkg/etc/dockflow/traefik/dynamic/**
 pkg/var/lib/dockflow/namespace/**
 pkg/var/lib/dockflow/traefik/dynamic/**
+.svm/

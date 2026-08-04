@@ -1,0 +1,6 @@
+{
+    "schemaVersion": 1,
+    "sdks": {
+        "go": "1.26.4"
+    }
+}
