@@ -7,6 +7,7 @@ import (
 	"dockflow/internal/util"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -210,16 +211,25 @@ func detectDatabaseType(database domain.DatabaseSpec, opt *docker.ContainerRunOp
 }
 
 func ExportSQL(namespace, name string) error {
-	ns, err := domain.NewNamespace(namespace)
+	out, err := ExportSQLData(namespace, name)
 	if err != nil {
 		return err
+	}
+	return os.WriteFile("/tmp/asdfasdf.sql", out, 0644)
+}
+
+// ExportSQLData returns a dump so non-CLI transports can stream it directly.
+func ExportSQLData(namespace, name string) ([]byte, error) {
+	ns, err := domain.NewNamespace(namespace)
+	if err != nil {
+		return nil, err
 	}
 
 	database, found := lo.Find(ns.Database, func(d domain.DatabaseSpec) bool {
 		return d.Name == name
 	})
 	if !found {
-		return fmt.Errorf("database [%s] not exist", name)
+		return nil, fmt.Errorf("database [%s] not exist", name)
 	}
 
 	opt := docker.ContainerExecOptions{}
@@ -234,15 +244,22 @@ func ExportSQL(namespace, name string) error {
 		opt,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	output := "/tmp/asdfasdf.sql"
-
-	return os.WriteFile(output, []byte(out), 0644)
+	return []byte(out), nil
 }
 
 func ImportSQL(namespace, name, sqlPath string) error {
+	file, err := os.Open(sqlPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return ImportSQLReader(namespace, name, file)
+}
+
+// ImportSQLReader imports SQL from a stream, avoiding transport-specific temp files.
+func ImportSQLReader(namespace, name string, input io.Reader) error {
 	ns, err := domain.NewNamespace(namespace)
 	if err != nil {
 		return err
@@ -255,14 +272,8 @@ func ImportSQL(namespace, name, sqlPath string) error {
 		return fmt.Errorf("database [%s] not exist", name)
 	}
 
-	file, err := os.Open(sqlPath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
 	opt := docker.ContainerExecOptions{
-		Stdin: file,
+		Stdin: input,
 	}
 
 	_, err = docker.ExecContainer(

@@ -1,0 +1,51 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "DockFlow Web API", "version": "1.0.0", "description": "HTTP interface for all implemented DockFlow CLI capabilities. No authentication is built in; bind to a trusted network or place behind an authenticated reverse proxy."},
+  "servers": [{"url": "http://localhost:8090"}],
+  "paths": {
+    "/api/v1/health": {"get": {"summary": "API health", "responses": {"200": {"description": "Healthy"}}}},
+    "/api/v1/init": {"post": {"summary": "Initialize DockFlow", "responses": {"200": {"description": "Ready"}}}},
+    "/api/v1/namespaces": {
+      "get": {"summary": "List namespaces", "responses": {"200": {"description": "Namespace list", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/Namespace"}}}}}}},
+      "post": {"summary": "Create namespace", "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}}}}, "responses": {"201": {"description": "Created"}, "409": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/api/v1/namespaces/{namespace}": {
+      "parameters": [{"$ref": "#/components/parameters/Namespace"}],
+      "get": {"summary": "Inspect namespace", "responses": {"200": {"description": "Namespace"}, "404": {"$ref": "#/components/responses/Error"}}},
+      "delete": {"summary": "Remove namespace", "responses": {"204": {"description": "Removed"}, "404": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/api/v1/namespaces/{namespace}/apps": {
+      "parameters": [{"$ref": "#/components/parameters/Namespace"}],
+      "get": {"summary": "List apps", "responses": {"200": {"description": "App list"}}},
+      "post": {"summary": "Create app", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AppCreate"}}}}, "responses": {"201": {"description": "Created"}, "400": {"$ref": "#/components/responses/Error"}}}
+    },
+    "/api/v1/namespaces/{namespace}/apps/{name}": {"parameters": [{"$ref": "#/components/parameters/Namespace"}, {"$ref": "#/components/parameters/Name"}], "delete": {"summary": "Remove app", "responses": {"204": {"description": "Removed"}}}},
+    "/api/v1/namespaces/{namespace}/apps/{name}/deploy": {"parameters": [{"$ref": "#/components/parameters/Namespace"}, {"$ref": "#/components/parameters/Name"}], "post": {"summary": "Deploy app", "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "properties": {"branch": {"type": "string"}, "commit": {"type": "string"}, "tag": {"type": "string"}}}}}}, "responses": {"202": {"description": "Deployment completed"}}}},
+    "/api/v1/namespaces/{namespace}/databases": {"parameters": [{"$ref": "#/components/parameters/Namespace"}], "get": {"summary": "List databases", "responses": {"200": {"description": "Database list"}}}, "post": {"summary": "Create database", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DatabaseCreate"}}}}, "responses": {"201": {"description": "Created"}}}},
+    "/api/v1/namespaces/{namespace}/databases/{name}": {"parameters": [{"$ref": "#/components/parameters/Namespace"}, {"$ref": "#/components/parameters/Name"}], "delete": {"summary": "Remove database", "responses": {"204": {"description": "Removed"}}}},
+    "/api/v1/namespaces/{namespace}/databases/{name}/export": {"parameters": [{"$ref": "#/components/parameters/Namespace"}, {"$ref": "#/components/parameters/Name"}], "get": {"summary": "Export SQL", "responses": {"200": {"description": "SQL dump", "content": {"application/sql": {"schema": {"type": "string", "format": "binary"}}}}}}},
+    "/api/v1/namespaces/{namespace}/databases/{name}/import": {"parameters": [{"$ref": "#/components/parameters/Namespace"}, {"$ref": "#/components/parameters/Name"}], "post": {"summary": "Import SQL (raw request body, max 100 MiB)", "requestBody": {"required": true, "content": {"application/sql": {"schema": {"type": "string", "format": "binary"}}}}, "responses": {"200": {"description": "Imported"}}}},
+    "/api/v1/namespaces/{namespace}/redis": {"parameters": [{"$ref": "#/components/parameters/Namespace"}], "get": {"summary": "List Redis instances", "responses": {"200": {"description": "Redis list"}}}, "post": {"summary": "Create Redis instance", "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RedisCreate"}}}}, "responses": {"201": {"description": "Created"}}}},
+    "/api/v1/namespaces/{namespace}/redis/{name}": {"parameters": [{"$ref": "#/components/parameters/Namespace"}, {"$ref": "#/components/parameters/Name"}], "delete": {"summary": "Remove Redis instance", "responses": {"204": {"description": "Removed"}}}},
+    "/api/v1/repositories": {"get": {"summary": "List Git credentials", "description": "Contains tokens; protect this endpoint.", "responses": {"200": {"description": "Credentials"}}}},
+    "/api/v1/repositories/{provider}": {
+      "parameters": [{"name": "provider", "in": "path", "required": true, "schema": {"type": "string", "enum": ["github", "gitee", "gitlab"]}}],
+      "post": {"summary": "Add Git credential", "requestBody": {"$ref": "#/components/requestBodies/Repository"}, "responses": {"201": {"description": "Added"}}},
+      "put": {"summary": "Update Git credential", "requestBody": {"$ref": "#/components/requestBodies/Repository"}, "responses": {"204": {"description": "Updated"}}},
+      "delete": {"summary": "Remove Git credential", "parameters": [{"name": "name", "in": "query", "required": true, "schema": {"type": "string"}}, {"name": "url", "in": "query", "required": false, "description": "Required for GitLab", "schema": {"type": "string"}}], "responses": {"204": {"description": "Removed"}}}
+    },
+    "/api/v1/openapi.json": {"get": {"summary": "OpenAPI document", "responses": {"200": {"description": "OpenAPI 3.1 JSON"}}}}
+  },
+  "components": {
+    "parameters": {"Namespace": {"name": "namespace", "in": "path", "required": true, "schema": {"type": "string"}}, "Name": {"name": "name", "in": "path", "required": true, "schema": {"type": "string"}}},
+    "responses": {"Error": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}},
+    "requestBodies": {"Repository": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["name", "token"], "properties": {"name": {"type": "string"}, "token": {"type": "string", "writeOnly": true}, "url": {"type": "string", "description": "Required for GitLab"}}}}}}},
+    "schemas": {
+      "Error": {"type": "object", "properties": {"error": {"type": "string"}}},
+      "Namespace": {"type": "object", "properties": {"name": {"type": "string"}, "network": {"type": "string"}, "network_id": {"type": "string"}, "subnet": {"type": "string"}, "gateway": {"type": "string"}}},
+      "AppCreate": {"type": "object", "required": ["name", "repo", "url"], "properties": {"name": {"type": "string"}, "cpu": {"type": "number", "default": 1}, "memory": {"type": "integer", "default": 1}, "repo": {"type": "string"}, "token": {"type": "string", "writeOnly": true}, "trigger": {"type": "object", "properties": {"type": {"type": "string", "enum": ["branch", "tag"], "default": "branch"}, "rule": {"type": "string", "default": "main"}}}, "env": {"type": "array", "items": {"type": "object", "required": ["key", "value"], "properties": {"key": {"type": "string"}, "value": {"type": "string"}}}}, "url": {"type": "array", "items": {"type": "object", "required": ["host", "port"], "properties": {"host": {"type": "string"}, "port": {"type": "string"}}}}}},
+      "DatabaseCreate": {"type": "object", "required": ["name", "username", "password", "dbname"], "properties": {"name": {"type": "string"}, "cpu": {"type": "number", "default": 1}, "memory": {"type": "number", "default": 2}, "username": {"type": "string"}, "password": {"type": "string", "writeOnly": true}, "dbname": {"type": "string"}, "dbtype": {"type": "string", "default": "mysql:5.7"}, "remote": {"type": "boolean", "default": false}}},
+      "RedisCreate": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "cpu": {"type": "number", "default": 0.5}, "memory": {"type": "number", "default": 0.5}, "password": {"type": "string", "writeOnly": true}, "version": {"type": "string", "default": "7"}, "appendonly": {"type": "boolean", "default": true}, "maxmemory_policy": {"type": "string", "default": "allkeys-lru"}}}
+    }
+  }
+}

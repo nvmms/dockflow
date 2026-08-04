@@ -1,17 +1,17 @@
 package domain
 
 type DatabaseSpec struct {
-	Namespace   string
-	Name        string
-	CPU         float64
-	Memory      float64
-	Username    string
-	Password    string
-	DbName      string
-	DbType      string
-	ContainerId string
-	Ip          []string
-	Remote      bool
+	Namespace   string   `json:"namespace"`
+	Name        string   `json:"name"`
+	CPU         float64  `json:"cpu"`
+	Memory      float64  `json:"memory"`
+	Username    string   `json:"username"`
+	Password    string   `json:"password"`
+	DbName      string   `json:"dbname"`
+	DbType      string   `json:"dbtype"`
+	ContainerId string   `json:"container_id"`
+	Ip          []string `json:"ip"`
+	Remote      bool     `json:"remote"`
 }
 
 // func NewDatabaseSpec(

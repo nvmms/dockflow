@@ -1,16 +1,16 @@
 package domain
 
 type RedisSpec struct {
-	Name        string
-	Namespace   string
-	Version     string
-	CPU         float64
-	Memory      float64
-	Password    string
-	AOF         bool
-	Eviction    string
-	ContainerId string
-	Ip          []string
+	Name        string   `json:"name"`
+	Namespace   string   `json:"namespace"`
+	Version     string   `json:"version"`
+	CPU         float64  `json:"cpu"`
+	Memory      float64  `json:"memory"`
+	Password    string   `json:"password"`
+	AOF         bool     `json:"appendonly"`
+	Eviction    string   `json:"maxmemory_policy"`
+	ContainerId string   `json:"container_id"`
+	Ip          []string `json:"ip"`
 }
 
 func NewRedisSpace(

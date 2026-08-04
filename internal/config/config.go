@@ -27,19 +27,19 @@ type Traefik struct {
 }
 
 type GitToken struct {
-	Name  string `yaml:"name"`
-	Token string `yaml:"token"`
+	Name  string `yaml:"name" json:"name"`
+	Token string `yaml:"token" json:"token"`
 }
 
 type GitGitlab struct {
-	Url string `yaml:"url"`
+	Url string `yaml:"url" json:"url"`
 	GitToken
 }
 
 type Git struct {
-	Gitee  []GitToken  `yaml:"gitee"`
-	Github []GitToken  `yaml:"github"`
-	Gitlab []GitGitlab `yaml:"gitlab"`
+	Gitee  []GitToken  `yaml:"gitee" json:"gitee"`
+	Github []GitToken  `yaml:"github" json:"github"`
+	Gitlab []GitGitlab `yaml:"gitlab" json:"gitlab"`
 }
 
 // func NewGitConfig(repo map[string]string) (Git, error) {
