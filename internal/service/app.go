@@ -8,6 +8,7 @@ import (
 	"dockflow/internal/service/traefik"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -24,6 +25,7 @@ var (
 type AppDeployer struct {
 	app *domain.AppSpec
 	ns  *domain.Namespace
+	log io.Writer
 }
 
 //
@@ -41,7 +43,23 @@ func NewAppDeployer(app *domain.AppSpec) (*AppDeployer, error) {
 	return &AppDeployer{
 		app: app,
 		ns:  ns,
+		log: io.Discard,
 	}, nil
+}
+
+func NewAppDeployerWithLog(app *domain.AppSpec, output io.Writer) (*AppDeployer, error) {
+	deployer, err := NewAppDeployer(app)
+	if err != nil {
+		return nil, err
+	}
+	if output != nil {
+		deployer.log = output
+	}
+	return deployer, nil
+}
+
+func (d *AppDeployer) logf(format string, args ...interface{}) {
+	fmt.Fprintf(d.log, format+"\n", args...)
 }
 
 //
@@ -53,10 +71,12 @@ func NewAppDeployer(app *domain.AppSpec) (*AppDeployer, error) {
 func (d *AppDeployer) Deploy(branch, commit, tag *string) error {
 
 	// ---------- git ----------
+	d.logf("[source] resolving and fetching %s", d.app.Repo)
 	version, err := d.fetchAppCode(branch, commit, tag)
 	if err != nil {
-		return err
+		return fmt.Errorf("source checkout failed: %w", err)
 	}
+	d.logf("[source] checked out commit %s", version)
 
 	containerId, err := docker.HasContainer(d.app.Name + "_" + version)
 	if err != nil {
@@ -75,17 +95,21 @@ func (d *AppDeployer) Deploy(branch, commit, tag *string) error {
 	}
 
 	// ---------- build ----------
+	d.logf("[build] building image %s:%s", d.app.Name, version)
 	image, err := d.buildApp(version)
 	if err != nil {
-		return err
+		return fmt.Errorf("image build failed: %w", err)
 	}
+	d.logf("[build] image ready: %s", image)
 
 	// ---------- run version ----------
+	d.logf("[runtime] starting version container")
 	if err := d.deployVersion(image, version); err != nil {
 		return err
 	}
 
 	// ---------- run latest ----------
+	d.logf("[runtime] starting latest container")
 	if err := d.deployVersion(image, "latest"); err != nil {
 		return err
 	}
@@ -124,12 +148,13 @@ func (d *AppDeployer) fetchAppCode(
 		d.app.Namespace + "/repo/" + d.app.Name
 
 	opts := git.GitCloneOptions{
-		RepoURL: d.app.Repo,
-		DestDir: repoPath,
-		Token:   d.app.Token,
-		Branch:  branch,
-		Commit:  commit,
-		Tag:     tag,
+		RepoURL:  d.app.Repo,
+		DestDir:  repoPath,
+		Token:    d.app.Token,
+		Branch:   branch,
+		Commit:   commit,
+		Tag:      tag,
+		Progress: d.log,
 	}
 
 	return git.GetLatestCode(opts)
@@ -169,7 +194,7 @@ func (d *AppDeployer) buildApp(version string) (string, error) {
 
 	image := fmt.Sprintf("%s:%s", d.app.Name, version)
 
-	if err := docker.Build(repoPath, image); err != nil {
+	if err := docker.Build(repoPath, image, d.log); err != nil {
 		return "", err
 	}
 	return image, nil

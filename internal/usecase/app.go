@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"bytes"
 	"dockflow/internal/config"
 	"dockflow/internal/domain"
 	"dockflow/internal/service"
@@ -11,6 +12,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/samber/lo"
 )
 
@@ -133,6 +135,86 @@ func ListApp(ns string) ([]domain.AppSpec, error) {
 	}
 
 	return namespace.App, nil
+}
+
+func UpdateApp(nsName, appName string, updated domain.AppSpec) error {
+	ns, err := domain.NewNamespace(nsName)
+	if err != nil {
+		return err
+	}
+	if ns == nil {
+		return ErrNamespaceNotFound
+	}
+
+	current, found := ns.FindApp(appName)
+	if !found {
+		return ErrAppNotFound
+	}
+	if updated.Repo == "" {
+		return fmt.Errorf("repo is required")
+	}
+	if updated.Trigger.Type != "branch" && updated.Trigger.Type != "tag" {
+		return fmt.Errorf("invalid trigger type: %s", updated.Trigger.Type)
+	}
+	if updated.Trigger.Rule == "" {
+		return fmt.Errorf("trigger rule is required")
+	}
+	for _, env := range updated.Envs {
+		if env.Key == "" {
+			return fmt.Errorf("env key is empty")
+		}
+	}
+	if len(updated.URLs) == 0 {
+		return fmt.Errorf("service must have at least one url")
+	}
+	for _, u := range updated.URLs {
+		if u.Host == "" || u.Port == "" {
+			return fmt.Errorf("service url host and port are required")
+		}
+	}
+
+	updated.Namespace = nsName
+	updated.Name = appName
+	updated.Deploy = current.Deploy
+	updated.Secret = current.Secret
+	if updated.Token == "" {
+		updated.Token = current.Token
+	}
+	return domain.SaveApp(updated)
+}
+
+func GetAppDeployLogs(nsName, appName, containerID, tail string) (string, error) {
+	ns, err := domain.NewNamespace(nsName)
+	if err != nil {
+		return "", err
+	}
+	if ns == nil {
+		return "", ErrNamespaceNotFound
+	}
+	app, found := ns.FindApp(appName)
+	if !found {
+		return "", ErrAppNotFound
+	}
+	_, found = lo.Find(app.Deploy, func(deploy domain.AppDeploy) bool {
+		return deploy.ContainerId == containerID
+	})
+	if !found {
+		return "", fmt.Errorf("deployment not found")
+	}
+	if tail == "" {
+		tail = "200"
+	}
+	stream, err := docker.ContainerLogs(containerID, docker.ContainerLogOptions{Tail: tail})
+	if err != nil {
+		return "", err
+	}
+	defer stream.Close()
+
+	var output bytes.Buffer
+	if _, err := stdcopy.StdCopy(&output, &output, stream); err != nil {
+		return "", err
+	}
+	return output.String(), nil
 }
 
 type DeployAppOptions struct {

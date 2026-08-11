@@ -70,7 +70,10 @@ func TarBuildContext(dir string) (io.Reader, error) {
 	return buf, nil
 }
 
-func Build(path string, tag string) error {
+func Build(path string, tag string, output io.Writer) error {
+	if output == nil {
+		output = io.Discard
+	}
 	isExist, err := filesystem.DirExists(path)
 	if err != nil {
 		return err
@@ -108,9 +111,13 @@ func Build(path string, tag string) error {
 		}
 
 		if v, ok := msg["stream"]; ok {
-			fmt.Print(v)
+			fmt.Fprint(output, v)
+		}
+		if v, ok := msg["status"]; ok {
+			fmt.Fprintln(output, v)
 		}
 		if v, ok := msg["error"]; ok {
+			fmt.Fprintln(output, v)
 			return fmt.Errorf("%v", v)
 		}
 	}

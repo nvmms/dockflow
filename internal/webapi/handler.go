@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"dockflow/internal/domain"
@@ -140,6 +141,36 @@ func handleApps(w http.ResponseWriter, r *http.Request, ns string, rest []string
 		return
 	}
 	name := rest[0]
+	if len(rest) == 3 && rest[1] == "deploy" && rest[2] == "jobs" && r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, usecase.ListDeploymentJobs(ns, name))
+		return
+	}
+	if len(rest) == 4 && rest[1] == "deploy" && rest[2] == "jobs" && r.Method == http.MethodGet {
+		job, err := usecase.GetDeploymentJob(ns, name, rest[3])
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
+	if len(rest) == 4 && rest[1] == "deploy" && rest[3] == "logs" && r.Method == http.MethodGet {
+		tail := r.URL.Query().Get("tail")
+		if tail != "" {
+			value, err := strconv.Atoi(tail)
+			if err != nil || value < 1 || value > 5000 {
+				writeError(w, fmt.Errorf("tail must be between 1 and 5000"))
+				return
+			}
+		}
+		logs, err := usecase.GetAppDeployLogs(ns, name, rest[2], tail)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"logs": logs})
+		return
+	}
 	if len(rest) == 2 && rest[1] == "deploy" && r.Method == http.MethodPost {
 		var in struct {
 			Branch string `json:"branch"`
@@ -149,12 +180,12 @@ func handleApps(w http.ResponseWriter, r *http.Request, ns string, rest []string
 		if err := decodeJSON(w, r, &in); err != nil {
 			return
 		}
-		err := usecase.DeployApp(usecase.DeployAppOptions{Namespace: ns, Name: name, Branch: in.Branch, Commit: in.Commit, Tag: in.Tag})
+		job, err := usecase.StartDeployApp(usecase.DeployAppOptions{Namespace: ns, Name: name, Branch: in.Branch, Commit: in.Commit, Tag: in.Tag})
 		if err != nil {
 			writeError(w, err)
 			return
 		}
-		writeJSON(w, 202, map[string]string{"status": "deployed"})
+		writeJSON(w, http.StatusAccepted, job)
 		return
 	}
 	if len(rest) == 1 && r.Method == http.MethodDelete {
@@ -165,7 +196,25 @@ func handleApps(w http.ResponseWriter, r *http.Request, ns string, rest []string
 		w.WriteHeader(204)
 		return
 	}
-	methodNotAllowed(w, "DELETE, POST")
+	if len(rest) == 1 && r.Method == http.MethodPut {
+		var in domain.AppSpec
+		if err := decodeJSON(w, r, &in); err != nil {
+			return
+		}
+		if in.CPU == 0 {
+			in.CPU = 1
+		}
+		if in.Memory == 0 {
+			in.Memory = 1
+		}
+		if err := usecase.UpdateApp(ns, name, in); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, in)
+		return
+	}
+	methodNotAllowed(w, "DELETE, PUT, POST")
 }
 
 func handleDatabases(w http.ResponseWriter, r *http.Request, ns string, rest []string) {

@@ -104,11 +104,11 @@ func (s *GitService) Handle(event GitPushEvent) {
 		return
 	}
 
-	err = usecase.DeployApp(opt)
+	job, err := usecase.StartDeployApp(opt)
 	if err != nil {
-		panic(err)
-		log.Println("[webhook][error] DeployApp error", err)
+		log.Println("[webhook][error] StartDeployApp error", err)
 		return
 	}
+	log.Printf("[webhook][info] deployment job [%s] started", job.ID)
 
 }

@@ -6,6 +6,7 @@ import (
 	"dockflow/internal/service/filesystem"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -25,7 +26,8 @@ type GitCloneOptions struct {
 	Commit *string // commit hash（最高优先级）
 	Tag    *string // tag 名（用于解析 commit）
 
-	Token string
+	Token    string
+	Progress io.Writer
 }
 
 var (
@@ -55,12 +57,16 @@ func ResolveCommit(opts GitCloneOptions) (string, error) {
 	})
 
 	listOpts := &git.ListOptions{}
-	listOpts.Auth = auth(opts)
+	authMethod, err := auth(opts)
+	if err != nil {
+		return "", err
+	}
+	listOpts.Auth = authMethod
 
 	refs, err := remote.List(listOpts)
 
 	if err != nil {
-		panic(err)
+		return "", fmt.Errorf("access repository refs: %w", err)
 	}
 
 	// 小工具：按 refname 查 hash
@@ -183,11 +189,16 @@ func EnsureRepo(opts GitCloneOptions) (*git.Repository, error) {
 	}
 
 	// fetch 最新 refs（不 merge）
+	authMethod, err := auth(opts)
+	if err != nil {
+		return nil, err
+	}
 	err = repo.Fetch(&git.FetchOptions{
 		RemoteName: "origin",
-		Auth:       auth(opts),
+		Auth:       authMethod,
 		Force:      true,
 		Tags:       git.AllTags,
+		Progress:   opts.Progress,
 	})
 	if err != nil && err != git.NoErrAlreadyUpToDate {
 		return nil, err
@@ -248,33 +259,38 @@ func GetLatestCode(opts GitCloneOptions) (string, error) {
 
 func cloneRepo(opts GitCloneOptions) (*git.Repository, error) {
 	cloneOpts := &git.CloneOptions{
-		URL: opts.RepoURL,
+		URL:      opts.RepoURL,
+		Progress: opts.Progress,
 	}
 
-	cloneOpts.Auth = auth(opts)
+	var err error
+	cloneOpts.Auth, err = auth(opts)
+	if err != nil {
+		return nil, err
+	}
 
 	return git.PlainClone(opts.DestDir, false, cloneOpts)
 }
 
-func auth(opts GitCloneOptions) transport.AuthMethod {
+func auth(opts GitCloneOptions) (transport.AuthMethod, error) {
 	if opts.Token != "" {
 		return &http.BasicAuth{
 			Username: "oauth2",
 			Password: opts.Token,
-		}
+		}, nil
 	} else {
 		gitInfo, err := domain.NewGitUrl(opts.RepoURL)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 
 		token, err := dockflowConfig.FindGit(gitInfo.Host, gitInfo.Username)
 		if err != nil {
-			panic(err)
+			return nil, fmt.Errorf("git credential not found: %w", err)
 		}
 		return &http.BasicAuth{
 			Username: "oauth2",
 			Password: token,
-		}
+		}, nil
 	}
 }

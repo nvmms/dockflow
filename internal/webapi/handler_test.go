@@ -64,6 +64,15 @@ func TestMethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestListAppDeploymentJobsRoute(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/namespaces/gb/apps/gb.api/deploy/jobs", nil)
+	w := httptest.NewRecorder()
+	NewHandler().ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+}
+
 func TestManagementUI(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
