@@ -264,7 +264,10 @@ func ExportSQLData(namespace, name string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []byte(out), nil
+	// A BOM keeps Windows tools such as Navicat and Notepad from treating a
+	// UTF-8 SQL dump as an ANSI file after the HTTP charset metadata is lost.
+	data := []byte(out)
+	return append([]byte{0xEF, 0xBB, 0xBF}, data...), nil
 }
 
 func ImportSQL(namespace, name, sqlPath string) error {
