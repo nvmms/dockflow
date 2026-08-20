@@ -7,6 +7,7 @@ import (
 	"dockflow/internal/service"
 	"dockflow/internal/service/docker"
 	"dockflow/internal/service/git"
+	"dockflow/internal/service/monitor"
 	"dockflow/internal/util"
 	"errors"
 	"fmt"
@@ -180,7 +181,10 @@ func UpdateApp(nsName, appName string, updated domain.AppSpec) error {
 	if updated.Token == "" {
 		updated.Token = current.Token
 	}
-	return domain.SaveApp(updated)
+	if err := domain.SaveApp(updated); err != nil {
+		return err
+	}
+	return monitor.RefreshAppTraefik(updated)
 }
 
 func GetAppDeployLogs(nsName, appName, containerID, tail string) (string, error) {

@@ -144,6 +144,16 @@ func (c *TraefikConfig) Save() error {
 	return os.Rename(tmp, c.Path)
 }
 
+// Reset clears all dynamic HTTP resources before a full regeneration. This
+// prevents routers and services for removed hosts or ports from lingering.
+func (c *TraefikConfig) Reset() {
+	c.HTTP = HTTPConfig{
+		Routers:     make(map[string]Router),
+		Services:    make(map[string]Service),
+		Middlewares: make(map[string]Middleware),
+	}
+}
+
 /* ---------- Core Logic ---------- */
 
 func (c *TraefikConfig) AddService(opt TraefikServiceOpt) {

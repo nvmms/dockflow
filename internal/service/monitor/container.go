@@ -90,6 +90,12 @@ func (m *MonitorContainer) findApp() error {
 
 func (m *MonitorContainer) onStart() {
 	log.Println("[container onStart]", m.ContainerId)
+	if err := m.refreshTraefikConfig(); err != nil {
+		log.Println("[traefik]      ", err)
+	}
+}
+
+func (m *MonitorContainer) refreshTraefikConfig() error {
 
 	traefikNetworkIp := ""
 	for networkName, network := range m.ContainerInfo.NetworkSettings.Networks {
@@ -99,15 +105,14 @@ func (m *MonitorContainer) onStart() {
 	}
 
 	if traefikNetworkIp == "" {
-		log.Println("[traefik] container not in dockflow-traefik network")
-		return
+		return fmt.Errorf("container not in dockflow-traefik network")
 	}
 
 	cfg, err := domain.NewTraefikConfig(m.TraefikConfigFile)
 	if err != nil {
-		log.Println("[traefik]      ", err)
-		return
+		return err
 	}
+	cfg.Reset()
 
 	for _, url := range m.App.URLs {
 		rule := url.Host
@@ -123,7 +128,23 @@ func (m *MonitorContainer) onStart() {
 		cfg.AddService(traefikOpt)
 	}
 
-	cfg.Save()
+	return cfg.Save()
+}
+
+// RefreshAppTraefik rewrites every dynamic configuration file for an app.
+// It is used after editing hosts or ports so no container restart is needed.
+func RefreshAppTraefik(app domain.AppSpec) error {
+	for _, deploy := range app.Deploy {
+		container := &MonitorContainer{ContainerId: deploy.ContainerId}
+		if err := container.findApp(); err != nil {
+			return err
+		}
+		container.TraefikConfigFile = container.getTraefikConfigFile()
+		if err := container.refreshTraefikConfig(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *MonitorContainer) onDie() {
