@@ -14,7 +14,7 @@
     </el-header>
     <el-container class="body-shell">
       <el-aside width="216px" class="sidebar">
-        <Menu v-model="activeView" />
+        <Menu :model-value="activeView" @update:model-value="navigateMenu" />
         <div class="sidebar-footer">
           <div class="version">DockFlow Console</div>
           <a href="/api/v1/openapi.json" target="_blank">API 文档 ↗</a>
@@ -27,13 +27,9 @@
           <p>命名空间用于隔离应用、数据库和 Redis 资源。</p>
           <el-button type="primary" @click="namespaceDialog = true">创建命名空间</el-button>
         </div>
-        <template v-else>
-          <DeploymentView v-if="activeView === 'apps' && deploymentApp" :namespace="currentNamespace" :app="deploymentApp" @back="deploymentApp = ''" />
-          <AppView v-else-if="activeView === 'apps'" :namespace="currentNamespace" @view-deployments="deploymentApp = $event" />
-          <DatabaseView v-else-if="activeView === 'databases'" :namespace="currentNamespace" />
-          <RedisView v-else-if="activeView === 'redis'" :namespace="currentNamespace" />
-          <RepositoryView v-else />
-        </template>
+        <router-view v-else v-slot="{ Component }">
+          <component :is="Component" :namespace="currentNamespace" @view-deployments="openDeployments" @back="backToApps" />
+        </router-view>
       </el-main>
     </el-container>
   </el-container>
@@ -50,18 +46,15 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
 import { api, type Namespace } from './api'
 import Menu from './components/Menu.vue'
-import AppView from './views/App.vue'
-import DeploymentView from './views/Deployment.vue'
-import DatabaseView from './views/Database.vue'
-import RedisView from './views/Redis.vue'
-import RepositoryView from './views/Repository.vue'
 
-const activeView = ref('apps')
-const deploymentApp = ref('')
+const route = useRoute()
+const router = useRouter()
+const activeView = computed(() => String(route.meta.menu || 'apps'))
 const namespaces = ref<Namespace[]>([])
 const currentNamespace = ref('')
 const loadingNamespaces = ref(false)
@@ -73,22 +66,36 @@ async function loadNamespaces() {
   loadingNamespaces.value = true
   try {
     namespaces.value = await api.get<Namespace[]>('/namespaces') || []
-    if (!namespaces.value.some(n => n.name === currentNamespace.value)) currentNamespace.value = namespaces.value[0]?.name || ''
+    const routeNamespace = typeof route.query.namespace === 'string' ? route.query.namespace : ''
+    if (namespaces.value.some(n => n.name === routeNamespace)) currentNamespace.value = routeNamespace
+    else if (!namespaces.value.some(n => n.name === currentNamespace.value)) currentNamespace.value = namespaces.value[0]?.name || ''
+    syncNamespaceRoute()
   } catch (error) { ElMessage.error((error as Error).message) }
   finally { loadingNamespaces.value = false }
 }
-function loadNamespaceDetail() { /* child views react to namespace changes */ }
+function loadNamespaceDetail() {
+  if (route.name === 'deployments') backToApps()
+  else syncNamespaceRoute()
+}
+function syncNamespaceRoute() {
+  const namespace = currentNamespace.value || undefined
+  if (route.query.namespace !== namespace) router.replace({ query: { ...route.query, namespace } })
+}
+function navigateMenu(value: string) { router.push({ name: value, query: { namespace: currentNamespace.value || undefined } }) }
+function openDeployments(app: string) { router.push({ name: 'deployments', params: { app }, query: { namespace: currentNamespace.value } }) }
+function backToApps() { router.push({ name: 'apps', query: { namespace: currentNamespace.value } }) }
 async function createNamespace() {
   if (!newNamespace.value.trim()) return ElMessage.warning('请输入命名空间名称')
   creating.value = true
   try {
     const created = await api.post<Namespace>('/namespaces', { name: newNamespace.value.trim() })
-    namespaceDialog.value = false; newNamespace.value = ''; await loadNamespaces(); currentNamespace.value = created.name
+    namespaceDialog.value = false; newNamespace.value = ''; await loadNamespaces(); currentNamespace.value = created.name; syncNamespaceRoute()
     ElMessage.success('命名空间已创建')
   } catch (error) { ElMessage.error((error as Error).message) }
   finally { creating.value = false }
 }
 onMounted(loadNamespaces)
-watch(activeView, () => { deploymentApp.value = '' })
-watch(currentNamespace, () => { deploymentApp.value = '' })
+watch(() => route.query.namespace, value => {
+  if (typeof value === 'string' && namespaces.value.some(item => item.name === value)) currentNamespace.value = value
+})
 </script>
