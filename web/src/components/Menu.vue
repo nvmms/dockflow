@@ -14,7 +14,6 @@ defineEmits<{ 'update:modelValue': [value: string] }>()
 
 const menu = [
   { key: 'apps', icon: '⬡', label: '应用' },
-  { key: 'deployments', icon: '⇧', label: '部署' },
   { key: 'databases', icon: '▣', label: '数据库' },
   { key: 'redis', icon: '◇', label: 'Redis' },
   { key: 'repositories', icon: '⑂', label: '代码仓库' },

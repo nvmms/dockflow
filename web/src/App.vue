@@ -28,8 +28,8 @@
           <el-button type="primary" @click="namespaceDialog = true">创建命名空间</el-button>
         </div>
         <template v-else>
-          <AppView v-if="activeView === 'apps'" :namespace="currentNamespace" />
-          <DeploymentView v-else-if="activeView === 'deployments'" :namespace="currentNamespace" />
+          <DeploymentView v-if="activeView === 'apps' && deploymentApp" :namespace="currentNamespace" :app="deploymentApp" @back="deploymentApp = ''" />
+          <AppView v-else-if="activeView === 'apps'" :namespace="currentNamespace" @view-deployments="deploymentApp = $event" />
           <DatabaseView v-else-if="activeView === 'databases'" :namespace="currentNamespace" />
           <RedisView v-else-if="activeView === 'redis'" :namespace="currentNamespace" />
           <RepositoryView v-else />
@@ -50,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api, type Namespace } from './api'
 import Menu from './components/Menu.vue'
@@ -61,6 +61,7 @@ import RedisView from './views/Redis.vue'
 import RepositoryView from './views/Repository.vue'
 
 const activeView = ref('apps')
+const deploymentApp = ref('')
 const namespaces = ref<Namespace[]>([])
 const currentNamespace = ref('')
 const loadingNamespaces = ref(false)
@@ -88,4 +89,6 @@ async function createNamespace() {
   finally { creating.value = false }
 }
 onMounted(loadNamespaces)
+watch(activeView, () => { deploymentApp.value = '' })
+watch(currentNamespace, () => { deploymentApp.value = '' })
 </script>

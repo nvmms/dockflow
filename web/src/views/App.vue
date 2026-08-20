@@ -4,11 +4,11 @@
     <el-card shadow="never" class="resource-card">
       <div class="table-toolbar"><el-input v-model="search" placeholder="搜索应用或仓库" clearable class="search-input" /><el-button text :loading="loading" @click="load">刷新</el-button></div>
       <el-table :data="filtered" v-loading="loading" empty-text="当前命名空间还没有应用">
-        <el-table-column label="应用"><template #default="{ row }"><div class="primary-cell"><span class="resource-avatar app-avatar">A</span><div><strong>{{ row.name }}</strong><small>{{ row.repo }}</small></div></div></template></el-table-column>
+        <el-table-column label="应用"><template #default="{ row }"><div class="primary-cell"><span class="resource-avatar app-avatar">A</span><div><el-button link class="app-name-link" @click="$emit('view-deployments', row.name)">{{ row.name }}</el-button><small>{{ row.repo }}</small></div></div></template></el-table-column>
         <el-table-column label="规格" width="140"><template #default="{ row }">{{ row.cpu }} Core · {{ row.memory }} GB</template></el-table-column>
         <el-table-column label="触发规则" width="150"><template #default="{ row }"><el-tag effect="plain">{{ row.trigger?.type }} · {{ row.trigger?.rule }}</el-tag></template></el-table-column>
         <el-table-column label="访问地址"><template #default="{ row }"><span v-if="row.url?.length">{{ row.url[0].host }} : {{ row.url[0].port }}</span><span v-else class="muted">—</span></template></el-table-column>
-        <el-table-column align="right" width="210"><template #default="{ row }"><el-button link @click="openEdit(row)">编辑</el-button><el-button link type="primary" @click="openDeploy(row)">部署</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template></el-table-column>
+        <el-table-column align="right" width="280"><template #default="{ row }"><el-button link @click="openEdit(row)">编辑</el-button><el-button link type="primary" @click="openDeploy(row)">部署</el-button><el-button link @click="$emit('view-deployments', row.name)">部署记录</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template></el-table-column>
       </el-table>
     </el-card>
   </section>
@@ -72,6 +72,7 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, type AppRecord } from '../api'
 const props = defineProps<{ namespace: string }>()
+defineEmits<{ 'view-deployments': [app: string] }>()
 type DeploymentJob={id:string;status:'running'|'succeeded'|'failed';logs:string;error?:string;startedAt:string;finishedAt?:string}
 const records=ref<AppRecord[]>([]), loading=ref(false), search=ref(''), dialog=ref(false), editing=ref(false), saving=ref(false), deployDialog=ref(false), deploying=ref(false), selected=ref<AppRecord>(), deployType=ref('branch'), deployValue=ref('main'), logsDialog=ref(false), logsLoading=ref(false), selectedContainer=ref(''), logTail=ref('200'), logs=ref(''), buildLogsDialog=ref(false), buildLogsLoading=ref(false), deploymentJobs=ref<DeploymentJob[]>([]), selectedJobId=ref(''), currentJob=ref<DeploymentJob>()
 let pollTimer:number|undefined
@@ -108,4 +109,5 @@ onBeforeUnmount(stopPolling)
 .log-output { min-height: 360px; max-height: 60vh; margin: 0; padding: 16px; overflow: auto; border-radius: 8px; background: #101521; color: #d8e0ee; font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
 .build-log-output { min-height: 440px; }
 .deploy-error { margin-top: 12px; }
+.app-name-link { height: auto; padding: 0; color: #1b273d; font-weight: 600; }
 </style>

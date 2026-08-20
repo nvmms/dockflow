@@ -1,12 +1,12 @@
 <template>
   <section class="resource-page">
     <header class="page-header">
-      <div><p class="eyebrow">DELIVERY</p><h1>部署</h1><p class="page-description">查看当前命名空间中所有应用的部署任务与执行结果。</p></div>
-      <el-button :loading="loading" @click="load">刷新</el-button>
+      <div><p class="eyebrow">DELIVERY</p><h1>{{ app }} 部署</h1><p class="page-description">查看该应用的部署任务、打包日志和运行日志。</p></div>
+      <div class="header-actions"><el-button @click="$emit('back')">返回应用</el-button><el-button :loading="loading" @click="load">刷新</el-button></div>
     </header>
     <el-card shadow="never" class="resource-card">
       <div class="table-toolbar deploy-toolbar">
-        <el-input v-model="search" placeholder="搜索应用或任务 ID" clearable class="search-input" />
+        <el-input v-model="search" placeholder="搜索任务 ID" clearable class="search-input" />
         <el-select v-model="status" class="status-filter">
           <el-option label="全部状态" value="all" />
           <el-option label="部署中" value="running" />
@@ -16,7 +16,7 @@
         <span class="record-count">{{ filtered.length }} 个部署任务</span>
       </div>
       <el-table :data="filtered" v-loading="loading" empty-text="当前命名空间还没有部署任务">
-        <el-table-column label="应用" min-width="190"><template #default="{ row }"><div class="primary-cell"><span class="resource-avatar deploy-avatar">D</span><div><strong>{{ row.app }}</strong><small>{{ row.id }}</small></div></div></template></el-table-column>
+        <el-table-column label="部署任务" min-width="190"><template #default="{ row }"><div class="primary-cell"><span class="resource-avatar deploy-avatar">D</span><div><strong>{{ row.id.slice(0, 12) }}</strong><small>{{ row.id }}</small></div></div></template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="tagType(row.status)" effect="plain">{{ statusText(row.status) }}</el-tag></template></el-table-column>
         <el-table-column label="开始时间" width="185"><template #default="{ row }">{{ formatTime(row.startedAt) }}</template></el-table-column>
         <el-table-column label="耗时" width="110"><template #default="{ row }">{{ duration(row) }}</template></el-table-column>
@@ -49,7 +49,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api, type AppRecord, type DeploymentJob } from '../api'
 
-const props = defineProps<{ namespace: string }>()
+const props = defineProps<{ namespace: string; app: string }>()
+defineEmits<{ back: [] }>()
 const records = ref<DeploymentJob[]>([])
 const apps = ref<AppRecord[]>([])
 const loading = ref(false)
@@ -67,17 +68,17 @@ let pollTimer: number | undefined
 const filtered = computed(() => records.value.filter(job => {
   const matchesStatus = status.value === 'all' || job.status === status.value
   const query = search.value.trim().toLowerCase()
-  return matchesStatus && (!query || `${job.app} ${job.id}`.toLowerCase().includes(query))
+  return matchesStatus && (!query || job.id.toLowerCase().includes(query))
 }))
 
 async function load() {
   loading.value = true
   try {
     const [jobs, appRecords] = await Promise.all([
-      api.get<DeploymentJob[]>(`/namespaces/${props.namespace}/deployments`),
+      api.get<DeploymentJob[]>(`/namespaces/${props.namespace}/apps/${props.app}/deploy/jobs`),
       api.get<AppRecord[]>(`/namespaces/${props.namespace}/apps`),
     ])
-    records.value = jobs || []
+    records.value = (jobs || []).sort((a, b) => b.startedAt.localeCompare(a.startedAt))
     apps.value = appRecords || []
     if (selected.value) selected.value = records.value.find(job => job.id === selected.value?.id)
     updatePolling()
@@ -117,13 +118,14 @@ function duration(job: DeploymentJob) {
   return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds / 60)}分 ${seconds % 60}秒`
 }
 
-watch(() => props.namespace, load, { immediate: true })
+watch(() => [props.namespace, props.app], load, { immediate: true })
 onBeforeUnmount(() => { if (pollTimer !== undefined) window.clearInterval(pollTimer) })
 </script>
 
 <style scoped>
 .deploy-toolbar { justify-content: flex-start; gap: 12px; }
 .deploy-toolbar .record-count { margin-left: auto; }
+.header-actions { display: flex; gap: 10px; }
 .status-filter { width: 140px; }
 .deploy-avatar { color: #25785f; background: #e5f7f0; }
 .deployment-error { display: block; overflow: hidden; color: #c04444; text-overflow: ellipsis; white-space: nowrap; }
