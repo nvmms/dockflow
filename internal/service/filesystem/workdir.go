@@ -13,6 +13,7 @@ const (
 	MySqlInitScript     = CfgScriptDir + "mysql_init_script.sql"
 	PgSqlInitScript     = CfgScriptDir + "pgsql_init_script.sql"
 	BaseDirName         = "/var/lib/dockflow"
+	DeploymentJobsPath  = BaseDirName + "/deployments.json"
 	TraefikCfgDir       = BaseDirName + "/traefik/dynamic"
 	NamespaceDirName    = BaseDirName + "/namespace"
 	BuildDockerfilePath = BaseDirName + "/build-templates/Dockerfile."

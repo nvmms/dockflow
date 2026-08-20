@@ -2,14 +2,17 @@ package usecase
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
 	"dockflow/internal/domain"
 	"dockflow/internal/service"
 	"dockflow/internal/service/docker"
+	"dockflow/internal/service/filesystem"
 )
 
 type DeploymentJob struct {
@@ -23,6 +26,7 @@ type DeploymentJob struct {
 	Error      string     `json:"error,omitempty"`
 	StartedAt  time.Time  `json:"startedAt"`
 	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	Deleted    bool       `json:"deleted,omitempty"`
 }
 
 type deploymentJobState struct {
@@ -49,7 +53,16 @@ var deploymentJobs = struct {
 	active map[string]string
 }{jobs: map[string]*deploymentJobState{}, active: map[string]string{}}
 
+var (
+	deploymentJobsLoadOnce sync.Once
+	deploymentJobsLoadErr  error
+	deploymentJobsStoreMu  sync.Mutex
+)
+
 func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
+	if err := ensureDeploymentJobsLoaded(); err != nil {
+		return DeploymentJob{}, err
+	}
 	namespace, err := domain.NewNamespace(opt.Namespace)
 	if err != nil {
 		return DeploymentJob{}, err
@@ -81,6 +94,7 @@ func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
 	deploymentJobs.jobs[id] = job
 	deploymentJobs.active[key] = id
 	deploymentJobs.Unlock()
+	_ = persistDeploymentJobs()
 
 	go func() {
 		_, _ = fmt.Fprintf(job, "[%s] deployment started\n", time.Now().Format(time.RFC3339))
@@ -106,12 +120,16 @@ func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
 		deploymentJobs.Lock()
 		delete(deploymentJobs.active, key)
 		deploymentJobs.Unlock()
+		_ = persistDeploymentJobs()
 	}()
 
 	return job.snapshot(), nil
 }
 
 func GetDeploymentJob(nsName, appName, id string) (DeploymentJob, error) {
+	if err := ensureDeploymentJobsLoaded(); err != nil {
+		return DeploymentJob{}, err
+	}
 	deploymentJobs.RLock()
 	job := deploymentJobs.jobs[id]
 	deploymentJobs.RUnlock()
@@ -119,7 +137,7 @@ func GetDeploymentJob(nsName, appName, id string) (DeploymentJob, error) {
 		return DeploymentJob{}, fmt.Errorf("deployment job not found")
 	}
 	snapshot := job.snapshot()
-	if snapshot.Namespace != nsName || snapshot.App != appName {
+	if snapshot.Deleted || snapshot.Namespace != nsName || snapshot.App != appName {
 		return DeploymentJob{}, fmt.Errorf("deployment job not found")
 	}
 	refreshDeploymentRuntime(&snapshot)
@@ -127,11 +145,15 @@ func GetDeploymentJob(nsName, appName, id string) (DeploymentJob, error) {
 }
 
 func ListDeploymentJobs(nsName, appName string) []DeploymentJob {
+	if ensureDeploymentJobsLoaded() != nil {
+		return []DeploymentJob{}
+	}
+	reconcileAppDeployments(nsName, appName)
 	deploymentJobs.RLock()
 	defer deploymentJobs.RUnlock()
 	result := make([]DeploymentJob, 0)
 	for _, job := range deploymentJobs.jobs {
-		if job.Namespace == nsName && job.App == appName {
+		if !job.Deleted && job.Namespace == nsName && job.App == appName {
 			snapshot := job.snapshot()
 			refreshDeploymentRuntime(&snapshot)
 			result = append(result, snapshot)
@@ -185,24 +207,36 @@ func refreshDeploymentRuntime(job *DeploymentJob) {
 }
 
 func DeleteDeploymentJob(nsName, appName, id string) error {
+	if err := ensureDeploymentJobsLoaded(); err != nil {
+		return err
+	}
 	deploymentJobs.Lock()
-	defer deploymentJobs.Unlock()
 	job := deploymentJobs.jobs[id]
 	if job == nil {
+		deploymentJobs.Unlock()
 		return fmt.Errorf("deployment job not found")
 	}
 	snapshot := job.snapshot()
 	if snapshot.Namespace != nsName || snapshot.App != appName {
+		deploymentJobs.Unlock()
 		return fmt.Errorf("deployment job not found")
 	}
 	if snapshot.Status == "running" {
+		deploymentJobs.Unlock()
 		return fmt.Errorf("deployment job is running")
 	}
-	delete(deploymentJobs.jobs, id)
-	return nil
+	job.mu.Lock()
+	job.Deleted = true
+	job.Logs = ""
+	job.mu.Unlock()
+	deploymentJobs.Unlock()
+	return persistDeploymentJobs()
 }
 
 func RestartDeploymentJob(nsName, appName, id string) (DeploymentJob, error) {
+	if err := ensureDeploymentJobsLoaded(); err != nil {
+		return DeploymentJob{}, err
+	}
 	deploymentJobs.RLock()
 	job := deploymentJobs.jobs[id]
 	deploymentJobs.RUnlock()
@@ -210,7 +244,7 @@ func RestartDeploymentJob(nsName, appName, id string) (DeploymentJob, error) {
 		return DeploymentJob{}, fmt.Errorf("deployment job not found")
 	}
 	snapshot := job.snapshot()
-	if snapshot.Namespace != nsName || snapshot.App != appName {
+	if snapshot.Deleted || snapshot.Namespace != nsName || snapshot.App != appName {
 		return DeploymentJob{}, fmt.Errorf("deployment job not found")
 	}
 	if snapshot.ContainerID == "" {
@@ -225,5 +259,101 @@ func RestartDeploymentJob(nsName, appName, id string) (DeploymentJob, error) {
 	job.Status = snapshot.Status
 	job.IP = snapshot.IP
 	job.mu.Unlock()
+	_ = persistDeploymentJobs()
 	return snapshot, nil
+}
+
+func ensureDeploymentJobsLoaded() error {
+	deploymentJobsLoadOnce.Do(func() {
+		data, err := os.ReadFile(filesystem.DeploymentJobsPath)
+		if os.IsNotExist(err) {
+			return
+		}
+		if err != nil {
+			deploymentJobsLoadErr = err
+			return
+		}
+		var stored []DeploymentJob
+		if err := json.Unmarshal(data, &stored); err != nil {
+			deploymentJobsLoadErr = err
+			return
+		}
+		now := time.Now()
+		deploymentJobs.Lock()
+		defer deploymentJobs.Unlock()
+		for _, item := range stored {
+			if item.Status == "running" {
+				item.Status = "failed"
+				item.Error = "dockflow restarted before deployment completed"
+				item.FinishedAt = &now
+			}
+			copy := item
+			deploymentJobs.jobs[item.ID] = &deploymentJobState{DeploymentJob: copy}
+		}
+	})
+	return deploymentJobsLoadErr
+}
+
+func persistDeploymentJobs() error {
+	deploymentJobsStoreMu.Lock()
+	defer deploymentJobsStoreMu.Unlock()
+	deploymentJobs.RLock()
+	stored := make([]DeploymentJob, 0, len(deploymentJobs.jobs))
+	for _, job := range deploymentJobs.jobs {
+		stored = append(stored, job.snapshot())
+	}
+	deploymentJobs.RUnlock()
+	data, err := json.MarshalIndent(stored, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filesystem.BaseDirName, 0755); err != nil {
+		return err
+	}
+	tmp := filesystem.DeploymentJobsPath + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filesystem.DeploymentJobsPath)
+}
+
+func reconcileAppDeployments(nsName, appName string) {
+	ns, err := domain.NewNamespace(nsName)
+	if err != nil || ns == nil {
+		return
+	}
+	app, found := ns.FindApp(appName)
+	if !found {
+		return
+	}
+	changed := false
+	for _, deploy := range app.Deploy {
+		deploymentJobs.Lock()
+		exists := false
+		for _, job := range deploymentJobs.jobs {
+			if job.ContainerID == deploy.ContainerId {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			id := "existing-" + deploy.ContainerId
+			if len(id) > 25 {
+				id = id[:25]
+			}
+			startedAt := time.Time{}
+			if inspect, inspectErr := docker.InspectContainer(deploy.ContainerId); inspectErr == nil {
+				startedAt, _ = time.Parse(time.RFC3339Nano, inspect.Created)
+			}
+			deploymentJobs.jobs[id] = &deploymentJobState{DeploymentJob: DeploymentJob{
+				ID: id, Namespace: nsName, App: appName, Status: "success",
+				ContainerID: deploy.ContainerId, StartedAt: startedAt,
+			}}
+			changed = true
+		}
+		deploymentJobs.Unlock()
+	}
+	if changed {
+		_ = persistDeploymentJobs()
+	}
 }
