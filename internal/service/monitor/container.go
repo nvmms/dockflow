@@ -168,5 +168,22 @@ func (m *MonitorContainer) onDie() {
 }
 
 func (m *MonitorContainer) getTraefikConfigFile() string {
-	return filesystem.TraefikCfgDir + "/" + m.App.Namespace + "_app_" + m.App.Name + "_" + m.Deploy.Version + ".yaml"
+	return AppTraefikConfigFile(m.App.Namespace, m.App.Name, m.Deploy.Version)
+}
+
+func AppTraefikConfigFile(namespace, appName, version string) string {
+	return filesystem.TraefikCfgDir + "/" + namespace + "_app_" + appName + "_" + version + ".yaml"
+}
+
+func RemoveAppTraefikConfig(namespace, appName, version string) error {
+	paths := []string{
+		AppTraefikConfigFile(namespace, appName, version),
+		filesystem.TraefikCfgDir + "/" + appName + "_" + version + ".yaml", // pre-namespace versions
+	}
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }

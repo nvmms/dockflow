@@ -225,6 +225,13 @@ func DeleteDeploymentJob(nsName, appName, id string) error {
 		deploymentJobs.Unlock()
 		return fmt.Errorf("deployment job is running")
 	}
+	deploymentJobs.Unlock()
+	if snapshot.ContainerID != "" {
+		if err := RemoveAppDeployment(nsName, appName, snapshot.ContainerID); err != nil {
+			return err
+		}
+	}
+	deploymentJobs.Lock()
 	job.mu.Lock()
 	job.Deleted = true
 	job.Logs = ""

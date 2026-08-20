@@ -147,7 +147,7 @@ async function loadRuntimeLogs() {
 }
 async function removeDeployment(job: DeploymentJob) {
   try {
-    await ElMessageBox.confirm(`确定删除部署任务 “${job.id.slice(0, 12)}” 及其日志记录吗？`, '删除部署记录', { type: 'warning' })
+    await ElMessageBox.confirm(`确定删除部署 “${job.id.slice(0, 12)}” 吗？对应容器、运行日志和 Traefik 路由也会被删除。`, '删除部署', { type: 'warning' })
     await api.delete(`/namespaces/${props.namespace}/apps/${props.app}/deploy/jobs/${job.id}`)
     if (selected.value?.id === job.id) { selected.value = undefined; buildLogsDialog.value = false; runtimeLogsDialog.value = false }
     ElMessage.success('部署记录已删除')

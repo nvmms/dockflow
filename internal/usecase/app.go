@@ -284,3 +284,47 @@ func RemoveApp(nsName, appName string) error {
 	ns.RemoveApp(appName)
 	return nil
 }
+
+func RemoveAppDeployment(nsName, appName, containerID string) error {
+	ns, err := domain.NewNamespace(nsName)
+	if err != nil {
+		return err
+	}
+	if ns == nil {
+		return ErrNamespaceNotFound
+	}
+	app, found := ns.FindApp(appName)
+	if !found {
+		return ErrAppNotFound
+	}
+
+	deployIndex := -1
+	version := ""
+	for i, deploy := range app.Deploy {
+		if deploy.ContainerId == containerID {
+			deployIndex = i
+			version = deploy.Version
+			break
+		}
+	}
+	if deployIndex == -1 {
+		return fmt.Errorf("deployment container not found")
+	}
+
+	if existingID, err := docker.HasContainer(containerID); err != nil {
+		return err
+	} else if existingID != "" {
+		if err := docker.StopContainer(existingID, nil); err != nil {
+			return err
+		}
+		if err := docker.RemoveContainer(existingID, true); err != nil {
+			return err
+		}
+	}
+	if err := monitor.RemoveAppTraefikConfig(nsName, appName, version); err != nil {
+		return err
+	}
+
+	app.Deploy = append(app.Deploy[:deployIndex], app.Deploy[deployIndex+1:]...)
+	return domain.SaveApp(app)
+}
