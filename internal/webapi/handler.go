@@ -154,6 +154,14 @@ func handleApps(w http.ResponseWriter, r *http.Request, ns string, rest []string
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
+	if len(rest) == 4 && rest[1] == "deploy" && rest[2] == "jobs" && r.Method == http.MethodDelete {
+		if err := usecase.DeleteDeploymentJob(ns, name, rest[3]); err != nil {
+			writeError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if len(rest) == 4 && rest[1] == "deploy" && rest[3] == "logs" && r.Method == http.MethodGet {
 		tail := r.URL.Query().Get("tail")
 		if tail != "" {
@@ -462,7 +470,7 @@ func writeError(w http.ResponseWriter, err error) {
 	s := strings.ToLower(err.Error())
 	if strings.Contains(s, "not found") || strings.Contains(s, "not exist") {
 		status = 404
-	} else if strings.Contains(s, "exist") {
+	} else if strings.Contains(s, "exist") || strings.Contains(s, "already running") || strings.Contains(s, "is running") {
 		status = 409
 	} else if strings.Contains(s, "required") || strings.Contains(s, "invalid") || strings.Contains(s, "support") || strings.Contains(s, "empty") {
 		status = 400

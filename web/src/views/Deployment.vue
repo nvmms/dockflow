@@ -21,7 +21,7 @@
         <el-table-column label="开始时间" width="185"><template #default="{ row }">{{ formatTime(row.startedAt) }}</template></el-table-column>
         <el-table-column label="耗时" width="110"><template #default="{ row }">{{ duration(row) }}</template></el-table-column>
         <el-table-column label="结果" min-width="240"><template #default="{ row }"><span v-if="row.error" class="deployment-error" :title="row.error">{{ row.error }}</span><span v-else class="muted">{{ row.status === 'running' ? '正在执行' : '—' }}</span></template></el-table-column>
-        <el-table-column align="right" width="190"><template #default="{ row }"><el-button link @click="openBuildLogs(row)">打包日志</el-button><el-button link :disabled="!latestContainer(row.app)" @click="openRuntimeLogs(row)">运行日志</el-button></template></el-table-column>
+        <el-table-column align="right" width="250"><template #default="{ row }"><el-button link @click="openBuildLogs(row)">打包日志</el-button><el-button link :disabled="!latestContainer(row.app)" @click="openRuntimeLogs(row)">运行日志</el-button><el-button link type="danger" :disabled="row.status==='running'" @click="removeDeployment(row)">删除</el-button></template></el-table-column>
       </el-table>
     </el-card>
   </section>
@@ -54,7 +54,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, type AppRecord, type DeploymentJob } from '../api'
 
 const props = defineProps<{ namespace: string; app: string }>()
@@ -134,6 +134,15 @@ async function loadRuntimeLogs() {
     runtimeLogs.value = result.logs
   } catch (error) { runtimeLogs.value = ''; ElMessage.error((error as Error).message) }
   finally { runtimeLogsLoading.value = false }
+}
+async function removeDeployment(job: DeploymentJob) {
+  try {
+    await ElMessageBox.confirm(`确定删除部署任务 “${job.id.slice(0, 12)}” 及其日志记录吗？`, '删除部署记录', { type: 'warning' })
+    await api.delete(`/namespaces/${props.namespace}/apps/${props.app}/deploy/jobs/${job.id}`)
+    if (selected.value?.id === job.id) { selected.value = undefined; buildLogsDialog.value = false; runtimeLogsDialog.value = false }
+    ElMessage.success('部署记录已删除')
+    await load()
+  } catch (error) { if (error !== 'cancel' && error !== 'close') ElMessage.error((error as Error).message) }
 }
 function updatePolling() {
   const hasRunning = records.value.some(job => job.status === 'running')

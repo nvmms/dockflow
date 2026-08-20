@@ -130,3 +130,21 @@ func ListDeploymentJobs(nsName, appName string) []DeploymentJob {
 	}
 	return result
 }
+
+func DeleteDeploymentJob(nsName, appName, id string) error {
+	deploymentJobs.Lock()
+	defer deploymentJobs.Unlock()
+	job := deploymentJobs.jobs[id]
+	if job == nil {
+		return fmt.Errorf("deployment job not found")
+	}
+	snapshot := job.snapshot()
+	if snapshot.Namespace != nsName || snapshot.App != appName {
+		return fmt.Errorf("deployment job not found")
+	}
+	if snapshot.Status == "running" {
+		return fmt.Errorf("deployment job is running")
+	}
+	delete(deploymentJobs.jobs, id)
+	return nil
+}
