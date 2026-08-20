@@ -1,8 +1,3 @@
--- =========================================================
--- DockFlow PostgreSQL Bootstrap Script
--- =========================================================
-
--- 1. 创建 dockflow 用户（无密码，peer 认证）
 DO
 $$
 BEGIN
@@ -18,21 +13,9 @@ BEGIN
 END
 $$;
 
--- 2. 授权数据库所有权（默认 POSTGRES_DB）
-ALTER DATABASE :"POSTGRES_DB" OWNER TO dockflow;
-
--- 3. 切换 schema 所有权
+SELECT format('ALTER DATABASE %I OWNER TO dockflow', current_database()) \gexec
 ALTER SCHEMA public OWNER TO dockflow;
-
--- 4. 允许 dockflow 使用 public schema
 GRANT ALL ON SCHEMA public TO dockflow;
-
--- 5. 设置默认权限（未来对象自动授权）
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-GRANT ALL ON TABLES TO dockflow;
-
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-GRANT ALL ON SEQUENCES TO dockflow;
-
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-GRANT ALL ON FUNCTIONS TO dockflow;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO dockflow;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO dockflow;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO dockflow;

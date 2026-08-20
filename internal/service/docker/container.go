@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 	"github.com/samber/lo"
 
@@ -112,6 +113,7 @@ func ContainerLogs(id string, opts ContainerLogOptions) (io.ReadCloser, error) {
 type ContainerExecOptions struct {
 	Workdir string
 	Env     []string
+	User    string
 	Stdin   io.Reader
 }
 
@@ -126,6 +128,7 @@ func ExecContainer(id string, cmd []string, opts ContainerExecOptions) (string, 
 		AttachStdin:  opts.Stdin != nil,
 		WorkingDir:   opts.Workdir,
 		Env:          opts.Env,
+		User:         opts.User,
 		Tty:          false,
 	})
 	if err != nil {
@@ -150,14 +153,30 @@ func ExecContainer(id string, cmd []string, opts ContainerExecOptions) (string, 
 		}()
 	}
 
-	// 2️⃣ container → stdout/stderr
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, resp.Reader)
+	// Docker's non-TTY exec stream multiplexes stdout and stderr with an
+	// 8-byte header. Demultiplex it so callers never receive protocol bytes.
+	var stdout, stderr bytes.Buffer
+	_, err = stdcopy.StdCopy(&stdout, &stderr, resp.Reader)
 	if err != nil {
 		return "", err
 	}
 
-	return buf.String(), nil
+	inspect, err := Client().ContainerExecInspect(ctx, exec.ID)
+	if err != nil {
+		return "", err
+	}
+	if inspect.ExitCode != 0 {
+		message := strings.TrimSpace(stderr.String())
+		if message == "" {
+			message = strings.TrimSpace(stdout.String())
+		}
+		if message == "" {
+			message = fmt.Sprintf("container exec exited with code %d", inspect.ExitCode)
+		}
+		return "", fmt.Errorf("container exec failed (exit %d): %s", inspect.ExitCode, message)
+	}
+
+	return stdout.String(), nil
 }
 
 type ContainerRunOptions struct {

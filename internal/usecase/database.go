@@ -182,7 +182,7 @@ func detectDatabaseType(database domain.DatabaseSpec, opt *docker.ContainerRunOp
 		opt.WithVolume(filesystem.MySqlInitScript, "/docker-entrypoint-initdb.d/001-dockflow.sql", "ro")
 		opt.WithVolume(fmt.Sprintf("dockflow-dbvolume-%s-%s-%s", database.Namespace, database.Name, database.DbName), "/var/lib/mysql")
 
-		opt.WithEnv("MYSQL_ROOT_PASSWORD", "dockflow-init-only")
+		opt.WithEnv("MYSQL_ALLOW_EMPTY_PASSWORD", "yes")
 		opt.WithEnv("MYSQL_DATABASE", database.DbName)
 		opt.WithEnv("MYSQL_USER", database.Username)
 		opt.WithEnv("MYSQL_PASSWORD", database.Password)
@@ -232,17 +232,11 @@ func ExportSQLData(namespace, name string) ([]byte, error) {
 		return nil, fmt.Errorf("database [%s] not exist", name)
 	}
 
-	opt := docker.ContainerExecOptions{}
-
-	out, err := docker.ExecContainer(
-		database.ContainerId,
-		[]string{
-			"mysqldump",
-			"-u", "dockflow",
-			database.DbName,
-		},
-		opt,
-	)
+	command, env, err := databaseExportCommand(database)
+	if err != nil {
+		return nil, err
+	}
+	out, err := docker.ExecContainer(database.ContainerId, command, docker.ContainerExecOptions{Env: env, User: databaseExecUser(database)})
 	if err != nil {
 		return nil, err
 	}
@@ -272,19 +266,76 @@ func ImportSQLReader(namespace, name string, input io.Reader) error {
 		return fmt.Errorf("database [%s] not exist", name)
 	}
 
-	opt := docker.ContainerExecOptions{
-		Stdin: input,
+	command, env, err := databaseImportCommand(database)
+	if err != nil {
+		return err
 	}
-
-	_, err = docker.ExecContainer(
-		database.ContainerId,
-		[]string{
-			"mysql",
-			"-u", "dockflow",
-			database.DbName,
-		},
-		opt,
-	)
+	_, err = docker.ExecContainer(database.ContainerId, command, docker.ContainerExecOptions{Stdin: input, Env: env, User: databaseExecUser(database)})
 
 	return err
+}
+
+func databaseExportCommand(database domain.DatabaseSpec) ([]string, []string, error) {
+	switch databaseEngine(database.DbType) {
+	case "mysql":
+		return []string{
+			"mysqldump",
+			"--user", "dockflow",
+			"--single-transaction",
+			"--routines",
+			"--triggers",
+			database.DbName,
+		}, nil, nil
+	case "postgres":
+		return []string{
+			"pg_dump",
+			"--username", "dockflow",
+			"--dbname", database.DbName,
+			"--no-owner",
+			"--no-privileges",
+		}, nil, nil
+	default:
+		return nil, nil, ErrdatabaseNotSuppert
+	}
+}
+
+func databaseImportCommand(database domain.DatabaseSpec) ([]string, []string, error) {
+	switch databaseEngine(database.DbType) {
+	case "mysql":
+		return []string{
+			"mysql",
+			"--user", "dockflow",
+			database.DbName,
+		}, nil, nil
+	case "postgres":
+		return []string{
+			"psql",
+			"--username", "dockflow",
+			"--dbname", database.DbName,
+			"--set", "ON_ERROR_STOP=1",
+		}, nil, nil
+	default:
+		return nil, nil, ErrdatabaseNotSuppert
+	}
+}
+
+func databaseEngine(dbType string) string {
+	name := strings.ToLower(dbType)
+	if idx := strings.LastIndex(name, "/"); idx != -1 {
+		name = name[idx+1:]
+	}
+	if idx := strings.Index(name, ":"); idx != -1 {
+		name = name[:idx]
+	}
+	if name == "postgresql" {
+		return "postgres"
+	}
+	return name
+}
+
+func databaseExecUser(database domain.DatabaseSpec) string {
+	if databaseEngine(database.DbType) == "postgres" {
+		return "postgres"
+	}
+	return "root"
 }
