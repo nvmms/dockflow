@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
@@ -22,6 +23,16 @@ var (
 	ErrdatabaseExist      = errors.New("database name is exist")
 	ErrdatabaseNotSuppert = errors.New("database not suppert")
 )
+
+type databaseImportStatus struct {
+	Status string
+	Error  string
+}
+
+var databaseImports = struct {
+	sync.RWMutex
+	items map[string]databaseImportStatus
+}{items: map[string]databaseImportStatus{}}
 
 func Createdatabase(database domain.DatabaseSpec) error {
 	ns, err := domain.NewNamespace(database.Namespace)
@@ -102,10 +113,19 @@ func Listdatabase(namespaceName string) ([]domain.DatabaseSpec, error) {
 		return nil, ErrNamespaceNotFound
 	}
 
-	return ns.Database, nil
+	result := append([]domain.DatabaseSpec(nil), ns.Database...)
+	for i := range result {
+		state := getDatabaseImportStatus(namespaceName, result[i].Name)
+		result[i].Status = state.Status
+		result[i].ImportError = state.Error
+	}
+	return result, nil
 }
 
 func Removedatabase(namespaceName string, databaseContainerName string) error {
+	if getDatabaseImportStatus(namespaceName, databaseContainerName).Status == "importing" {
+		return fmt.Errorf("database import is running")
+	}
 	ns, err := domain.NewNamespace(namespaceName)
 	if err != nil {
 		return err
@@ -275,12 +295,88 @@ func ImportSQLReader(namespace, name string, input io.Reader) error {
 	return err
 }
 
+// StartDatabaseImport receives the upload synchronously, then imports the
+// completed temporary file in the background.
+func StartDatabaseImport(namespace, name string, input io.Reader) error {
+	if _, err := findDatabase(namespace, name); err != nil {
+		return err
+	}
+
+	key := namespace + "/" + name
+	databaseImports.Lock()
+	if databaseImports.items[key].Status == "importing" {
+		databaseImports.Unlock()
+		return fmt.Errorf("database import already running")
+	}
+	databaseImports.items[key] = databaseImportStatus{Status: "importing"}
+	databaseImports.Unlock()
+
+	temp, err := os.CreateTemp("", "dockflow-import-*.sql")
+	if err != nil {
+		setDatabaseImportStatus(namespace, name, "running", err.Error())
+		return err
+	}
+	path := temp.Name()
+	if _, err = io.Copy(temp, input); err != nil {
+		temp.Close()
+		os.Remove(path)
+		setDatabaseImportStatus(namespace, name, "running", err.Error())
+		return err
+	}
+	if err = temp.Close(); err != nil {
+		os.Remove(path)
+		setDatabaseImportStatus(namespace, name, "running", err.Error())
+		return err
+	}
+
+	go func() {
+		defer os.Remove(path)
+		err := ImportSQL(namespace, name, path)
+		if err != nil {
+			setDatabaseImportStatus(namespace, name, "running", err.Error())
+			return
+		}
+		setDatabaseImportStatus(namespace, name, "running", "")
+	}()
+	return nil
+}
+
+func findDatabase(namespace, name string) (domain.DatabaseSpec, error) {
+	ns, err := domain.NewNamespace(namespace)
+	if err != nil {
+		return domain.DatabaseSpec{}, err
+	}
+	database, found := lo.Find(ns.Database, func(d domain.DatabaseSpec) bool { return d.Name == name })
+	if !found {
+		return domain.DatabaseSpec{}, fmt.Errorf("database [%s] not exist", name)
+	}
+	return database, nil
+}
+
+func getDatabaseImportStatus(namespace, name string) databaseImportStatus {
+	databaseImports.RLock()
+	defer databaseImports.RUnlock()
+	state, found := databaseImports.items[namespace+"/"+name]
+	if !found {
+		return databaseImportStatus{Status: "running"}
+	}
+	return state
+}
+
+func setDatabaseImportStatus(namespace, name, status, importError string) {
+	databaseImports.Lock()
+	databaseImports.items[namespace+"/"+name] = databaseImportStatus{Status: status, Error: importError}
+	databaseImports.Unlock()
+}
+
 func databaseExportCommand(database domain.DatabaseSpec) ([]string, []string, error) {
 	switch databaseEngine(database.DbType) {
 	case "mysql":
 		return []string{
 			"mysqldump",
 			"--user", "dockflow",
+			"--default-character-set=utf8mb4",
+			"--opt",
 			"--single-transaction",
 			"--routines",
 			"--triggers",
@@ -293,7 +389,7 @@ func databaseExportCommand(database domain.DatabaseSpec) ([]string, []string, er
 			"--dbname", database.DbName,
 			"--no-owner",
 			"--no-privileges",
-		}, nil, nil
+		}, []string{"PGCLIENTENCODING=UTF8"}, nil
 	default:
 		return nil, nil, ErrdatabaseNotSuppert
 	}
@@ -305,6 +401,7 @@ func databaseImportCommand(database domain.DatabaseSpec) ([]string, []string, er
 		return []string{
 			"mysql",
 			"--user", "dockflow",
+			"--default-character-set=utf8mb4",
 			database.DbName,
 		}, nil, nil
 	case "postgres":
@@ -313,7 +410,7 @@ func databaseImportCommand(database domain.DatabaseSpec) ([]string, []string, er
 			"--username", "dockflow",
 			"--dbname", database.DbName,
 			"--set", "ON_ERROR_STOP=1",
-		}, nil, nil
+		}, []string{"PGCLIENTENCODING=UTF8"}, nil
 	default:
 		return nil, nil, ErrdatabaseNotSuppert
 	}

@@ -12,6 +12,8 @@ type DatabaseSpec struct {
 	ContainerId string   `json:"container_id"`
 	Ip          []string `json:"ip"`
 	Remote      bool     `json:"remote"`
+	Status      string   `json:"status,omitempty"`
+	ImportError string   `json:"import_error,omitempty"`
 }
 
 // func NewDatabaseSpec(

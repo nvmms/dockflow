@@ -271,18 +271,18 @@ func handleDatabases(w http.ResponseWriter, r *http.Request, ns string, rest []s
 			writeError(w, err)
 			return
 		}
-		w.Header().Set("Content-Type", "application/sql")
+		w.Header().Set("Content-Type", "application/sql; charset=utf-8")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.sql"`, name))
 		w.Write(data)
 		return
 	}
 	if len(rest) == 2 && rest[1] == "import" && r.Method == http.MethodPost {
 		r.Body = http.MaxBytesReader(w, r.Body, 100<<20)
-		if err := usecase.ImportSQLReader(ns, name, r.Body); err != nil {
+		if err := usecase.StartDatabaseImport(ns, name, r.Body); err != nil {
 			writeError(w, err)
 			return
 		}
-		writeJSON(w, 200, map[string]string{"status": "imported"})
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "importing"})
 		return
 	}
 	methodNotAllowed(w, "DELETE, GET, POST")

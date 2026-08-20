@@ -62,6 +62,8 @@ export interface DatabaseRecord {
   container_id: string
   ip: string[]
   remote: boolean
+  status?: 'running' | 'importing'
+  import_error?: string
 }
 
 export interface RedisRecord {
