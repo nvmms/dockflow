@@ -1,6 +1,4 @@
 #!/bin/sh
-
-#!/bin/sh
 set -e
 
 case "$1" in
@@ -30,6 +28,7 @@ case "$1" in
     echo "  2) Enable and start DockFlow service:"
     echo "     sudo systemctl enable dockflow"
     echo "     sudo systemctl start dockflow"
+    echo "     (the DockFlow environment is initialized automatically on service start)"
     echo ""
     echo "  3) Allow your user to access DockFlow data:"
     echo "     sudo usermod -aG dockflow <your-username>"

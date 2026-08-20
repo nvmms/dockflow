@@ -5,6 +5,7 @@ import (
 	"dockflow/internal/cli"
 	"dockflow/internal/service/monitor"
 	"dockflow/internal/service/webhook"
+	"dockflow/internal/usecase"
 	"dockflow/internal/webapi"
 	"log"
 	"os"
@@ -26,6 +27,12 @@ func runCLI() {
 }
 
 func runDaemon() {
+	log.Println("dockflow daemon initializing environment")
+	if err := usecase.Init(); err != nil {
+		log.Fatalf("dockflow daemon initialization failed: %v", err)
+	}
+	log.Println("dockflow environment ready")
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	gitService := webhook.NewGitService()
