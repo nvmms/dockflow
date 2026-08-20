@@ -2,7 +2,7 @@
   <section class="resource-page">
     <header class="page-header">
       <div><p class="eyebrow">DELIVERY</p><h1>{{ app }} 部署</h1><p class="page-description">查看该应用的部署任务、打包日志和运行日志。</p></div>
-      <div class="header-actions"><el-button @click="$emit('back')">返回应用</el-button><el-button :loading="loading" @click="load">刷新</el-button></div>
+      <div class="header-actions"><el-button @click="$emit('back')">返回应用</el-button><el-button type="primary" @click="openDeploy">部署</el-button><el-button :loading="loading" @click="load">刷新</el-button></div>
     </header>
     <el-card shadow="never" class="resource-card">
       <div class="table-toolbar deploy-toolbar">
@@ -25,6 +25,14 @@
       </el-table>
     </el-card>
   </section>
+
+  <el-dialog v-model="deployDialog" :title="`部署 ${app}`" width="480px">
+    <el-form label-position="top">
+      <el-form-item label="部署来源"><el-radio-group v-model="deployType"><el-radio-button value="branch">分支</el-radio-button><el-radio-button value="tag">标签</el-radio-button><el-radio-button value="commit">Commit</el-radio-button></el-radio-group></el-form-item>
+      <el-form-item :label="deployType"><el-input v-model="deployValue" :placeholder="deployType === 'branch' ? 'main' : ''" /></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="deployDialog = false">取消</el-button><el-button type="primary" :loading="deploying" @click="deploy">开始部署</el-button></template>
+  </el-dialog>
 
   <el-dialog v-model="buildLogsDialog" :title="`${selected?.app || ''} 打包日志`" width="900px">
     <div class="log-toolbar"><el-tag :type="tagType(selected?.status)" effect="dark">{{ statusText(selected?.status) }}</el-tag><span class="job-id">任务 {{ selected?.id }}</span><el-button v-if="selected?.status === 'running'" :loading="loading" @click="load">刷新</el-button></div>
@@ -56,6 +64,10 @@ const apps = ref<AppRecord[]>([])
 const loading = ref(false)
 const search = ref('')
 const status = ref('all')
+const deployDialog = ref(false)
+const deploying = ref(false)
+const deployType = ref('branch')
+const deployValue = ref('main')
 const buildLogsDialog = ref(false)
 const runtimeLogsDialog = ref(false)
 const runtimeLogsLoading = ref(false)
@@ -86,6 +98,25 @@ async function load() {
   finally { loading.value = false }
 }
 const selectedApp = computed(() => apps.value.find(app => app.name === selected.value?.app))
+function openDeploy() {
+  const current = apps.value.find(item => item.name === props.app)
+  deployType.value = current?.trigger?.type || 'branch'
+  deployValue.value = current?.trigger?.rule || 'main'
+  deployDialog.value = true
+}
+async function deploy() {
+  if (!deployValue.value.trim()) return ElMessage.warning('请输入部署来源')
+  deploying.value = true
+  try {
+    const job = await api.post<DeploymentJob>(`/namespaces/${props.namespace}/apps/${props.app}/deploy`, { [deployType.value]: deployValue.value.trim() })
+    deployDialog.value = false
+    selected.value = job
+    buildLogsDialog.value = true
+    await load()
+    ElMessage.success('部署任务已进入后台')
+  } catch (error) { ElMessage.error((error as Error).message) }
+  finally { deploying.value = false }
+}
 function latestContainer(appName: string) { return apps.value.find(app => app.name === appName)?.deploy?.at(-1)?.containerId || '' }
 function openBuildLogs(job: DeploymentJob) { selected.value = job; buildLogsDialog.value = true }
 function openRuntimeLogs(job: DeploymentJob) {
