@@ -41,6 +41,17 @@ export interface AppRecord {
   deploy?: Array<{ containerId: string; version: string; url: string }>
 }
 
+export interface DeploymentJob {
+  id: string
+  namespace: string
+  app: string
+  status: 'running' | 'succeeded' | 'failed'
+  logs: string
+  error?: string
+  startedAt: string
+  finishedAt?: string
+}
+
 export interface DatabaseRecord {
   name: string
   cpu: number

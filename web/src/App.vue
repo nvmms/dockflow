@@ -29,6 +29,7 @@
         </div>
         <template v-else>
           <AppView v-if="activeView === 'apps'" :namespace="currentNamespace" />
+          <DeploymentView v-else-if="activeView === 'deployments'" :namespace="currentNamespace" />
           <DatabaseView v-else-if="activeView === 'databases'" :namespace="currentNamespace" />
           <RedisView v-else-if="activeView === 'redis'" :namespace="currentNamespace" />
           <RepositoryView v-else />
@@ -54,6 +55,7 @@ import { ElMessage } from 'element-plus'
 import { api, type Namespace } from './api'
 import Menu from './components/Menu.vue'
 import AppView from './views/App.vue'
+import DeploymentView from './views/Deployment.vue'
 import DatabaseView from './views/Database.vue'
 import RedisView from './views/Redis.vue'
 import RepositoryView from './views/Repository.vue'

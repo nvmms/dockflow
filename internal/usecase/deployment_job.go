@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -128,5 +129,20 @@ func ListDeploymentJobs(nsName, appName string) []DeploymentJob {
 			result = append(result, job.snapshot())
 		}
 	}
+	return result
+}
+
+func ListNamespaceDeploymentJobs(nsName string) []DeploymentJob {
+	deploymentJobs.RLock()
+	defer deploymentJobs.RUnlock()
+	result := make([]DeploymentJob, 0)
+	for _, job := range deploymentJobs.jobs {
+		if job.Namespace == nsName {
+			result = append(result, job.snapshot())
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].StartedAt.After(result[j].StartedAt)
+	})
 	return result
 }

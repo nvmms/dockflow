@@ -90,6 +90,14 @@ func namespaceResource(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if len(parts) == 2 && parts[1] == "deployments" {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, "GET")
+			return
+		}
+		writeJSON(w, http.StatusOK, usecase.ListNamespaceDeploymentJobs(ns))
+		return
+	}
 	switch parts[1] {
 	case "apps":
 		handleApps(w, r, ns, parts[2:])
