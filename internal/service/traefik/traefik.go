@@ -79,8 +79,8 @@ func Init() error {
 // }
 
 func ensureNetwork(cfg *config.Config) (err error) {
-	log.Println("[dockflow init]", "create traefik network")
-	networkId := strings.TrimSpace(cfg.Platform.Traefik.ContainerId)
+	log.Println("[dockflow init]", "ensure traefik network")
+	networkId := strings.TrimSpace(cfg.Platform.Traefik.NetworkId)
 	if networkId == "" {
 		networkId, err = createTraefikNetwork(cfg)
 		if err != nil {
@@ -98,8 +98,8 @@ func ensureNetwork(cfg *config.Config) (err error) {
 			}
 		}
 	}
-	config.Save(cfg)
-	return nil
+	cfg.Platform.Traefik.NetworkId = networkId
+	return config.Save(cfg)
 }
 
 func createTraefikNetwork(cfg *config.Config) (string, error) {
@@ -108,6 +108,10 @@ func createTraefikNetwork(cfg *config.Config) (string, error) {
 		return "", err
 	}
 	if networkId != "" {
+		cfg.Platform.Traefik.NetworkId = networkId
+		if err := config.Save(cfg); err != nil {
+			return "", err
+		}
 		return networkId, nil
 	}
 	opts := docker.NetworkCreateOptions{
@@ -131,46 +135,46 @@ func ensureContainer(cfg *config.Config) (err error) {
 	containerId := strings.TrimSpace(cfg.Platform.Traefik.ContainerId)
 
 	if containerId == "" {
-		containerId, err = createTraefikContainer()
+		containerId, err = docker.HasContainer(TraefikContainerName)
 		if err != nil {
-			panic(err)
-			// err = docker.StopContainer(containerId, nil)
-			// if err != nil {
-			// 	panic(err)
-			// }
-			// err = docker.RemoveContainer(containerId, true)
-			// if err != nil {
-			// 	panic(err)
-			// }
-		}
-
-		cfg.Platform.Traefik.ContainerId = containerId
-		config.Save(cfg)
-	} else {
-		containerId, err := docker.HasContainer(containerId)
-		if err != nil {
-			panic(err)
+			return err
 		}
 		if containerId == "" {
 			containerId, err = createTraefikContainer()
-			cfg.Platform.Traefik.ContainerId = containerId
-			config.Save(cfg)
-		} else {
-			isRun, err := docker.ContainerRunning(containerId)
 			if err != nil {
-				panic(err)
+				return err
 			}
-			if !isRun {
-				err = docker.StartContainer(containerId)
+		}
+	} else {
+		containerId, err = docker.HasContainer(containerId)
+		if err != nil {
+			return err
+		}
+		if containerId == "" {
+			containerId, err = docker.HasContainer(TraefikContainerName)
+			if err != nil {
+				return err
+			}
+			if containerId == "" {
+				containerId, err = createTraefikContainer()
 				if err != nil {
-					panic(err)
+					return err
 				}
 			}
 		}
-
 	}
 
-	return nil
+	isRun, err := docker.ContainerRunning(containerId)
+	if err != nil {
+		return err
+	}
+	if !isRun {
+		if err := docker.StartContainer(containerId); err != nil {
+			return err
+		}
+	}
+	cfg.Platform.Traefik.ContainerId = containerId
+	return config.Save(cfg)
 }
 
 func createTraefikContainer() (containerId string, err error) {
@@ -199,5 +203,5 @@ func createTraefikContainer() (containerId string, err error) {
 	if err != nil {
 		return containerId, err
 	}
-	return "", err
+	return containerId, nil
 }
