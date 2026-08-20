@@ -115,7 +115,7 @@ func (m *MonitorContainer) onStart() {
 			rule += "/" + m.Deploy.Version
 		}
 		traefikOpt := domain.TraefikServiceOpt{
-			Name:      m.App.Name + "_" + m.Deploy.Version + "_" + url.Port,
+			Name:      m.App.Namespace + "_app_" + m.App.Name + "_" + m.Deploy.Version + "_" + url.Port,
 			Rule:      rule,
 			Url:       traefikNetworkIp + ":" + url.Port,
 			EnableTLS: true,
@@ -147,5 +147,5 @@ func (m *MonitorContainer) onDie() {
 }
 
 func (m *MonitorContainer) getTraefikConfigFile() string {
-	return filesystem.TraefikCfgDir + "/" + m.App.Name + "_" + m.Deploy.Version + ".yaml"
+	return filesystem.TraefikCfgDir + "/" + m.App.Namespace + "_app_" + m.App.Name + "_" + m.Deploy.Version + ".yaml"
 }

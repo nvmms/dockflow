@@ -162,6 +162,15 @@ func handleApps(w http.ResponseWriter, r *http.Request, ns string, rest []string
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if len(rest) == 5 && rest[1] == "deploy" && rest[2] == "jobs" && rest[4] == "restart" && r.Method == http.MethodPost {
+		job, err := usecase.RestartDeploymentJob(ns, name, rest[3])
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
 	if len(rest) == 4 && rest[1] == "deploy" && rest[3] == "logs" && r.Method == http.MethodGet {
 		tail := r.URL.Query().Get("tail")
 		if tail != "" {

@@ -74,7 +74,8 @@ func Createdatabase(database domain.DatabaseSpec) error {
 		return err
 	}
 
-	opts := docker.NewRunOptions(database.Name, databaseImageName)
+	containerName := docker.ResourceContainerName(database.Namespace, name, database.Name)
+	opts := docker.NewRunOptions(containerName, databaseImageName)
 	opts.WithRestart(container.RestartPolicyOnFailure)
 	opts.WithNetwork(ns.Network)
 	opts.WithCpu(database.CPU)

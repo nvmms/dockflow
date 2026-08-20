@@ -78,7 +78,8 @@ func (d *AppDeployer) Deploy(branch, commit, tag *string) error {
 	}
 	d.logf("[source] checked out commit %s", version)
 
-	containerId, err := docker.HasContainer(d.app.Name + "_" + version)
+	containerName := docker.ResourceContainerName(d.app.Namespace, "app", d.app.Name, version)
+	containerId, err := docker.HasContainer(containerName)
 	if err != nil {
 		return err
 	}
@@ -241,7 +242,7 @@ func (d *AppDeployer) deployVersion(
 
 func (d *AppDeployer) runApp(image, version string) (string, error) {
 
-	containerName := fmt.Sprintf("%s_%s", d.app.Name, version)
+	containerName := docker.ResourceContainerName(d.app.Namespace, "app", d.app.Name, version)
 
 	// ---------- cleanup ----------
 	if err := d.cleanupOldContainer(version); err != nil {

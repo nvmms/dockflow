@@ -45,7 +45,9 @@ export interface DeploymentJob {
   id: string
   namespace: string
   app: string
-  status: 'running' | 'succeeded' | 'failed'
+  status: 'running' | 'success' | 'failed' | 'stopped'
+  containerId?: string
+  ip?: string[]
   logs: string
   error?: string
   startedAt: string

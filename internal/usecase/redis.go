@@ -31,7 +31,8 @@ func CreateRedis(redis domain.RedisSpec) error {
 		return err
 	}
 
-	opts := docker.NewRunOptions(redis.Name, redisImageName)
+	containerName := docker.ResourceContainerName(redis.Namespace, "redis", redis.Name)
+	opts := docker.NewRunOptions(containerName, redisImageName)
 
 	opts.WithNetwork(ns.Network)
 	opts.WithCpu(redis.CPU)

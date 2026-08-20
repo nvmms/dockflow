@@ -9,19 +9,21 @@
         <el-input v-model="search" placeholder="搜索任务 ID" clearable class="search-input" />
         <el-select v-model="status" class="status-filter">
           <el-option label="全部状态" value="all" />
-          <el-option label="部署中" value="running" />
-          <el-option label="成功" value="succeeded" />
+          <el-option label="运行中" value="running" />
+          <el-option label="成功" value="success" />
           <el-option label="失败" value="failed" />
+          <el-option label="停止" value="stopped" />
         </el-select>
         <span class="record-count">{{ filtered.length }} 个部署任务</span>
       </div>
       <el-table :data="filtered" v-loading="loading" empty-text="当前命名空间还没有部署任务">
         <el-table-column label="部署任务" min-width="190"><template #default="{ row }"><div class="primary-cell"><span class="resource-avatar deploy-avatar">D</span><div><strong>{{ row.id.slice(0, 12) }}</strong><small>{{ row.id }}</small></div></div></template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="tagType(row.status)" effect="plain">{{ statusText(row.status) }}</el-tag></template></el-table-column>
+        <el-table-column label="IP" min-width="150"><template #default="{ row }"><span v-if="row.ip?.length">{{ row.ip.join(', ') }}</span><span v-else class="muted">—</span></template></el-table-column>
         <el-table-column label="开始时间" width="185"><template #default="{ row }">{{ formatTime(row.startedAt) }}</template></el-table-column>
         <el-table-column label="耗时" width="110"><template #default="{ row }">{{ duration(row) }}</template></el-table-column>
         <el-table-column label="结果" min-width="240"><template #default="{ row }"><span v-if="row.error" class="deployment-error" :title="row.error">{{ row.error }}</span><span v-else class="muted">{{ row.status === 'running' ? '正在执行' : '—' }}</span></template></el-table-column>
-        <el-table-column align="right" width="250"><template #default="{ row }"><el-button link @click="openBuildLogs(row)">打包日志</el-button><el-button link :disabled="!latestContainer(row.app)" @click="openRuntimeLogs(row)">运行日志</el-button><el-button link type="danger" :disabled="row.status==='running'" @click="removeDeployment(row)">删除</el-button></template></el-table-column>
+        <el-table-column align="right" width="310"><template #default="{ row }"><el-button link @click="openBuildLogs(row)">打包日志</el-button><el-button link :disabled="!row.containerId" @click="openRuntimeLogs(row)">运行日志</el-button><el-button link type="primary" :disabled="!row.containerId || row.status === 'running'" @click="restartDeployment(row)">重启</el-button><el-button link type="danger" :disabled="row.status==='running'" @click="removeDeployment(row)">删除</el-button></template></el-table-column>
       </el-table>
     </el-card>
   </section>
@@ -121,10 +123,18 @@ function latestContainer(appName: string) { return apps.value.find(app => app.na
 function openBuildLogs(job: DeploymentJob) { selected.value = job; buildLogsDialog.value = true }
 function openRuntimeLogs(job: DeploymentJob) {
   selected.value = job
-  selectedContainer.value = latestContainer(job.app)
+  selectedContainer.value = job.containerId || latestContainer(job.app)
   runtimeLogs.value = ''
   runtimeLogsDialog.value = true
   loadRuntimeLogs()
+}
+async function restartDeployment(job: DeploymentJob) {
+  try {
+    await ElMessageBox.confirm(`确定重启部署 “${job.id.slice(0, 12)}” 的容器吗？`, '重启部署', { type: 'warning' })
+    await api.post<DeploymentJob>(`/namespaces/${props.namespace}/apps/${props.app}/deploy/jobs/${job.id}/restart`)
+    ElMessage.success('部署已重启')
+    await load()
+  } catch (error) { if (error !== 'cancel' && error !== 'close') ElMessage.error((error as Error).message) }
 }
 async function loadRuntimeLogs() {
   if (!selected.value || !selectedContainer.value) return
@@ -149,8 +159,8 @@ function updatePolling() {
   if (hasRunning && pollTimer === undefined) pollTimer = window.setInterval(load, 2000)
   if (!hasRunning && pollTimer !== undefined) { window.clearInterval(pollTimer); pollTimer = undefined }
 }
-function tagType(value?: string) { return value === 'succeeded' ? 'success' : value === 'failed' ? 'danger' : 'warning' }
-function statusText(value?: string) { return value === 'succeeded' ? '成功' : value === 'failed' ? '失败' : value === 'running' ? '部署中' : '未知' }
+function tagType(value?: string) { return value === 'success' ? 'success' : value === 'failed' ? 'danger' : value === 'stopped' ? 'info' : 'warning' }
+function statusText(value?: string) { return value === 'success' ? '成功' : value === 'failed' ? '失败' : value === 'running' ? '运行中' : value === 'stopped' ? '停止' : '未知' }
 function formatTime(value: string) { return new Date(value).toLocaleString() }
 function duration(job: DeploymentJob) {
   const end = job.finishedAt ? new Date(job.finishedAt).getTime() : Date.now()

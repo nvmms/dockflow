@@ -200,6 +200,14 @@ func NewRunOptions(name, image string) *ContainerRunOptions {
 	}
 }
 
+// ResourceContainerName gives every namespaced resource a globally unique,
+// human-readable Docker container name.
+func ResourceContainerName(namespace, resourceType string, parts ...string) string {
+	nameParts := []string{namespace, resourceType}
+	nameParts = append(nameParts, parts...)
+	return strings.Join(nameParts, "_")
+}
+
 func (o *ContainerRunOptions) WithEnv(key string, value interface{}) {
 	strValue := fmt.Sprintf("%v", value)
 	o.Env = append(o.Env, key+"="+strValue)

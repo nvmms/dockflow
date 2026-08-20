@@ -9,6 +9,7 @@ import (
 
 	"dockflow/internal/domain"
 	"dockflow/internal/service"
+	"dockflow/internal/service/docker"
 )
 
 type DeploymentJob struct {
@@ -16,6 +17,8 @@ type DeploymentJob struct {
 	Namespace  string     `json:"namespace"`
 	App        string     `json:"app"`
 	Status     string     `json:"status"`
+	ContainerID string    `json:"containerId,omitempty"`
+	IP         []string   `json:"ip,omitempty"`
 	Logs       string     `json:"logs"`
 	Error      string     `json:"error,omitempty"`
 	StartedAt  time.Time  `json:"startedAt"`
@@ -93,10 +96,13 @@ func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
 			job.Error = err.Error()
 			job.Logs += "\n[failed] " + err.Error() + "\n"
 		} else {
-			job.Status = "succeeded"
+			job.Status = "success"
 			job.Logs += "\n[success] deployment completed\n"
 		}
 		job.mu.Unlock()
+		if err == nil {
+			populateDeploymentContainer(job, opt.Namespace, opt.Name)
+		}
 		deploymentJobs.Lock()
 		delete(deploymentJobs.active, key)
 		deploymentJobs.Unlock()
@@ -116,6 +122,7 @@ func GetDeploymentJob(nsName, appName, id string) (DeploymentJob, error) {
 	if snapshot.Namespace != nsName || snapshot.App != appName {
 		return DeploymentJob{}, fmt.Errorf("deployment job not found")
 	}
+	refreshDeploymentRuntime(&snapshot)
 	return snapshot, nil
 }
 
@@ -125,10 +132,56 @@ func ListDeploymentJobs(nsName, appName string) []DeploymentJob {
 	result := make([]DeploymentJob, 0)
 	for _, job := range deploymentJobs.jobs {
 		if job.Namespace == nsName && job.App == appName {
-			result = append(result, job.snapshot())
+			snapshot := job.snapshot()
+			refreshDeploymentRuntime(&snapshot)
+			result = append(result, snapshot)
 		}
 	}
 	return result
+}
+
+func populateDeploymentContainer(job *deploymentJobState, nsName, appName string) {
+	ns, err := domain.NewNamespace(nsName)
+	if err != nil || ns == nil {
+		return
+	}
+	app, found := ns.FindApp(appName)
+	if !found || len(app.Deploy) == 0 {
+		return
+	}
+	deploy := app.Deploy[len(app.Deploy)-1]
+	job.mu.Lock()
+	job.ContainerID = deploy.ContainerId
+	job.mu.Unlock()
+
+	snapshot := job.snapshot()
+	refreshDeploymentRuntime(&snapshot)
+	job.mu.Lock()
+	job.IP = snapshot.IP
+	job.Status = snapshot.Status
+	job.mu.Unlock()
+}
+
+func refreshDeploymentRuntime(job *DeploymentJob) {
+	if job.Status == "succeeded" { // Compatibility with jobs created by older versions.
+		job.Status = "success"
+	}
+	if job.Status != "success" || job.ContainerID == "" {
+		return
+	}
+	inspect, err := docker.InspectContainer(job.ContainerID)
+	if err != nil || inspect.State == nil || !inspect.State.Running {
+		job.Status = "stopped"
+		return
+	}
+	job.IP = job.IP[:0]
+	if inspect.NetworkSettings != nil {
+		for _, network := range inspect.NetworkSettings.Networks {
+			if network != nil && network.IPAddress != "" {
+				job.IP = append(job.IP, network.IPAddress)
+			}
+		}
+	}
 }
 
 func DeleteDeploymentJob(nsName, appName, id string) error {
@@ -147,4 +200,30 @@ func DeleteDeploymentJob(nsName, appName, id string) error {
 	}
 	delete(deploymentJobs.jobs, id)
 	return nil
+}
+
+func RestartDeploymentJob(nsName, appName, id string) (DeploymentJob, error) {
+	deploymentJobs.RLock()
+	job := deploymentJobs.jobs[id]
+	deploymentJobs.RUnlock()
+	if job == nil {
+		return DeploymentJob{}, fmt.Errorf("deployment job not found")
+	}
+	snapshot := job.snapshot()
+	if snapshot.Namespace != nsName || snapshot.App != appName {
+		return DeploymentJob{}, fmt.Errorf("deployment job not found")
+	}
+	if snapshot.ContainerID == "" {
+		return DeploymentJob{}, fmt.Errorf("deployment has no container to restart")
+	}
+	if err := docker.RestartContainer(snapshot.ContainerID, nil); err != nil {
+		return DeploymentJob{}, err
+	}
+	snapshot.Status = "success"
+	refreshDeploymentRuntime(&snapshot)
+	job.mu.Lock()
+	job.Status = snapshot.Status
+	job.IP = snapshot.IP
+	job.mu.Unlock()
+	return snapshot, nil
 }
