@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"bytes"
 	"dockflow/internal/domain"
 	"dockflow/internal/service/docker"
 	"dockflow/internal/service/filesystem"
@@ -11,10 +12,13 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/samber/lo"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
 
 var (
@@ -328,6 +332,11 @@ func StartDatabaseImport(namespace, name string, input io.Reader) error {
 		setDatabaseImportStatus(namespace, name, "running", err.Error())
 		return err
 	}
+	if err = normalizeSQLFileEncoding(path); err != nil {
+		os.Remove(path)
+		setDatabaseImportStatus(namespace, name, "running", err.Error())
+		return err
+	}
 
 	go func() {
 		defer os.Remove(path)
@@ -339,6 +348,30 @@ func StartDatabaseImport(namespace, name string, input io.Reader) error {
 		setDatabaseImportStatus(namespace, name, "running", "")
 	}()
 	return nil
+}
+
+func normalizeSQLFileEncoding(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	const utf8BOM = "\xef\xbb\xbf"
+	if bytes.HasPrefix(data, []byte(utf8BOM)) {
+		data = data[len(utf8BOM):]
+		return os.WriteFile(path, data, 0600)
+	}
+	if utf8.Valid(data) {
+		return nil
+	}
+
+	decoded, _, err := transform.Bytes(simplifiedchinese.GB18030.NewDecoder(), data)
+	if err != nil {
+		return fmt.Errorf("unsupported SQL file encoding: expected UTF-8 or GB18030: %w", err)
+	}
+	if !utf8.Valid(decoded) {
+		return fmt.Errorf("unsupported SQL file encoding: expected UTF-8 or GB18030")
+	}
+	return os.WriteFile(path, decoded, 0600)
 }
 
 func findDatabase(namespace, name string) (domain.DatabaseSpec, error) {
