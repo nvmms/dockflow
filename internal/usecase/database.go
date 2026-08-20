@@ -337,5 +337,5 @@ func databaseExecUser(database domain.DatabaseSpec) string {
 	if databaseEngine(database.DbType) == "postgres" {
 		return "postgres"
 	}
-	return "root"
+	return "mysql"
 }
