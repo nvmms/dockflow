@@ -17,12 +17,12 @@
         <span class="record-count">{{ filtered.length }} 个部署任务</span>
       </div>
       <el-table :data="filtered" v-loading="loading" empty-text="当前命名空间还没有部署任务">
-        <el-table-column label="部署版本" min-width="255"><template #default="{ row }"><div class="primary-cell"><span class="resource-avatar deploy-avatar">D</span><div class="deployment-identity"><div class="deployment-title"><strong>{{ deploymentTitle(row) }}</strong><el-tag v-if="row.sourceType" size="small" effect="plain" round>{{ sourceTypeText(row.sourceType) }}</el-tag></div><small>{{ deploymentDetail(row) }}</small></div></div></template></el-table-column>
+        <el-table-column label="部署版本" min-width="255"><template #default="{ row }"><div class="primary-cell"><span class="resource-avatar deploy-avatar">D</span><div class="deployment-identity"><div class="deployment-title"><strong>{{ deploymentTitle(row) }}</strong><el-tag v-if="row.sourceType" size="small" effect="plain" round>{{ sourceTypeText(row.sourceType) }}</el-tag><el-tag v-if="row.needs_recreate" type="warning" size="small" effect="plain">需重建</el-tag></div><small>{{ deploymentDetail(row) }}</small></div></div></template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="tagType(row.status)" effect="plain">{{ statusText(row.status) }}</el-tag></template></el-table-column>
         <el-table-column label="IP" min-width="150"><template #default="{ row }"><span v-if="row.ip?.length">{{ row.ip.join(', ') }}</span><span v-else class="muted">—</span></template></el-table-column>
         <el-table-column label="创建时间" width="185"><template #default="{ row }">{{ formatTime(row.startedAt) }}</template></el-table-column>
         <el-table-column label="结果" min-width="240"><template #default="{ row }"><span v-if="row.error" class="deployment-error" :title="row.error">{{ row.error }}</span><span v-else class="muted">{{ row.status === 'running' ? '正在执行' : '—' }}</span></template></el-table-column>
-        <el-table-column align="right" width="310"><template #default="{ row }"><el-button link @click="openBuildLogs(row)">打包日志</el-button><el-button link :disabled="!row.containerId" @click="openRuntimeLogs(row)">运行日志</el-button><el-button link type="primary" :disabled="!row.containerId || row.status === 'running'" @click="restartDeployment(row)">重启</el-button><el-button link type="danger" :disabled="row.status==='running'" @click="removeDeployment(row)">删除</el-button></template></el-table-column>
+        <el-table-column align="right" width="350"><template #default="{ row }"><el-button link :disabled="!row.containerId || row.status === 'running'" @click="openEdit(row)">编辑</el-button><el-button link @click="openBuildLogs(row)">打包日志</el-button><el-button link :disabled="!row.containerId" @click="openRuntimeLogs(row)">运行日志</el-button><el-button link type="primary" :disabled="!row.containerId || row.status === 'running'" @click="restartDeployment(row)">重启</el-button><el-button link type="danger" :disabled="row.status==='running'" @click="removeDeployment(row)">删除</el-button></template></el-table-column>
       </el-table>
     </el-card>
   </section>
@@ -31,8 +31,25 @@
     <el-form label-position="top">
       <el-form-item label="部署来源"><el-radio-group v-model="deployType"><el-radio-button value="branch">分支</el-radio-button><el-radio-button value="tag">标签</el-radio-button><el-radio-button value="commit">Commit</el-radio-button></el-radio-group></el-form-item>
       <el-form-item :label="deployType"><el-input v-model="deployValue" :placeholder="deployType === 'branch' ? 'main' : ''" /></el-form-item>
+      <el-form-item label="自动重启策略"><el-select v-model="deployRestartPolicy"><el-option label="除非手动停止（推荐）" value="unless-stopped"/><el-option label="始终自动重启" value="always"/><el-option label="仅失败时重启" value="on-failure"/><el-option label="不自动重启" value="no"/></el-select></el-form-item>
+      <el-divider>日志策略</el-divider>
+      <el-form-item label="日志驱动"><el-select v-model="deployLogDriver"><el-option label="local（推荐）" value="local"/><el-option label="json-file" value="json-file"/><el-option label="阿里云日志服务" value="aliyun-sls"/></el-select></el-form-item>
+      <div v-if="deployLogDriver !== 'aliyun-sls'" class="form-grid"><el-form-item label="单文件上限"><el-input v-model="deployLogMaxSize" placeholder="10m"/></el-form-item><el-form-item label="保留文件数"><el-input-number v-model="deployLogMaxFile" :min="1" :max="100"/></el-form-item></div>
+      <div v-else class="form-grid"><el-form-item label="Endpoint"><el-input v-model="deploySLSEndpoint"/></el-form-item><el-form-item label="Project"><el-input v-model="deploySLSProject"/></el-form-item><el-form-item label="Logstore"><el-input v-model="deploySLSLogstore"/></el-form-item><el-form-item label="采集配置名称"><el-input v-model="deploySLSConfigName"/></el-form-item></div>
     </el-form>
     <template #footer><el-button @click="deployDialog = false">取消</el-button><el-button type="primary" :loading="deploying" @click="deploy">开始部署</el-button></template>
+  </el-dialog>
+
+  <el-dialog v-model="editDialog" title="编辑部署配置" width="520px">
+    <el-form label-position="top">
+      <el-form-item label="自动重启策略"><el-select v-model="editRestartPolicy"><el-option label="除非手动停止（推荐）" value="unless-stopped"/><el-option label="始终自动重启" value="always"/><el-option label="仅失败时重启" value="on-failure"/><el-option label="不自动重启" value="no"/></el-select></el-form-item>
+      <el-divider>日志策略</el-divider>
+      <el-form-item label="日志驱动"><el-select v-model="editLogDriver"><el-option label="local（推荐）" value="local"/><el-option label="json-file" value="json-file"/><el-option label="阿里云日志服务" value="aliyun-sls"/></el-select></el-form-item>
+      <div v-if="editLogDriver !== 'aliyun-sls'" class="form-grid"><el-form-item label="单文件上限"><el-input v-model="editLogMaxSize"/></el-form-item><el-form-item label="保留文件数"><el-input-number v-model="editLogMaxFile" :min="1" :max="100"/></el-form-item></div>
+      <div v-else class="form-grid"><el-form-item label="Endpoint"><el-input v-model="editSLSEndpoint"/></el-form-item><el-form-item label="Project"><el-input v-model="editSLSProject"/></el-form-item><el-form-item label="Logstore"><el-input v-model="editSLSLogstore"/></el-form-item><el-form-item label="采集配置名称"><el-input v-model="editSLSConfigName"/></el-form-item></div>
+      <el-form-item label="立即应用"><el-switch v-model="editApplyNow"/><div class="form-hint">开启后停止并按新配置重建该部署容器；关闭时保存配置并标记“需重建”。</div></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="editDialog=false">取消</el-button><el-button type="primary" :loading="editSaving" @click="saveEdit">保存</el-button></template>
   </el-dialog>
 
   <el-dialog v-model="buildLogsDialog" :title="`${selected?.app || ''} 打包日志`" width="900px">
@@ -69,6 +86,26 @@ const deployDialog = ref(false)
 const deploying = ref(false)
 const deployType = ref('branch')
 const deployValue = ref('main')
+const deployRestartPolicy = ref('unless-stopped')
+const deployLogDriver = ref('local')
+const deployLogMaxSize = ref('10m')
+const deployLogMaxFile = ref(3)
+const deploySLSProject = ref('')
+const deploySLSLogstore = ref('')
+const deploySLSEndpoint = ref('')
+const deploySLSConfigName = ref('')
+const editDialog = ref(false)
+const editSaving = ref(false)
+const editTarget = ref<DeploymentJob>()
+const editRestartPolicy = ref('unless-stopped')
+const editLogDriver = ref('local')
+const editLogMaxSize = ref('10m')
+const editLogMaxFile = ref(3)
+const editApplyNow = ref(false)
+const editSLSProject = ref('')
+const editSLSLogstore = ref('')
+const editSLSEndpoint = ref('')
+const editSLSConfigName = ref('')
 const buildLogsDialog = ref(false)
 const runtimeLogsDialog = ref(false)
 const runtimeLogsLoading = ref(false)
@@ -104,13 +141,17 @@ function openDeploy() {
   const current = apps.value.find(item => item.name === props.app)
   deployType.value = current?.trigger?.type || 'branch'
   deployValue.value = current?.trigger?.rule || 'main'
+  deployRestartPolicy.value = 'unless-stopped'
+  deployLogDriver.value = 'local'
+  deployLogMaxSize.value = '10m'
+  deployLogMaxFile.value = 3
   deployDialog.value = true
 }
 async function deploy() {
   if (!deployValue.value.trim()) return ElMessage.warning('请输入部署来源')
   deploying.value = true
   try {
-    const job = await api.post<DeploymentJob>(`/namespaces/${props.namespace}/apps/${props.app}/deploy`, { [deployType.value]: deployValue.value.trim() })
+    const job = await api.post<DeploymentJob>(`/namespaces/${props.namespace}/apps/${props.app}/deploy`, { [deployType.value]: deployValue.value.trim(), restart_policy: deployRestartPolicy.value, log_driver: deployLogDriver.value, log_max_size: deployLogMaxSize.value, log_max_file: deployLogMaxFile.value, sls_project: deploySLSProject.value, sls_logstore: deploySLSLogstore.value, sls_endpoint: deploySLSEndpoint.value, sls_config_name: deploySLSConfigName.value })
     deployDialog.value = false
     selected.value = job
     buildLogsDialog.value = true
@@ -121,6 +162,30 @@ async function deploy() {
 }
 function latestContainer(appName: string) { return apps.value.find(app => app.name === appName)?.deploy?.at(-1)?.containerId || '' }
 function openBuildLogs(job: DeploymentJob) { selected.value = job; buildLogsDialog.value = true }
+function openEdit(job: DeploymentJob) {
+  editTarget.value = job
+  editRestartPolicy.value = job.restart_policy || 'unless-stopped'
+  editLogDriver.value = job.log_driver || 'local'
+  editLogMaxSize.value = job.log_max_size || '10m'
+  editLogMaxFile.value = job.log_max_file || 3
+  editSLSProject.value = job.sls_project || ''
+  editSLSLogstore.value = job.sls_logstore || ''
+  editSLSEndpoint.value = job.sls_endpoint || ''
+  editSLSConfigName.value = job.sls_config_name || ''
+  editApplyNow.value = false
+  editDialog.value = true
+}
+async function saveEdit() {
+  if (!editTarget.value) return
+  editSaving.value = true
+  try {
+    await api.put(`/namespaces/${props.namespace}/apps/${props.app}/deploy/jobs/${editTarget.value.id}`, {restart_policy: editRestartPolicy.value, log_driver: editLogDriver.value, log_max_size: editLogMaxSize.value, log_max_file: editLogMaxFile.value, apply_now: editApplyNow.value, sls_project: editSLSProject.value, sls_logstore: editSLSLogstore.value, sls_endpoint: editSLSEndpoint.value, sls_config_name: editSLSConfigName.value})
+    editDialog.value = false
+    ElMessage.success(editApplyNow.value ? '部署已按新配置重建' : '配置已保存，等待重建')
+    await load()
+  } catch (error) { ElMessage.error((error as Error).message) }
+  finally { editSaving.value = false }
+}
 function openRuntimeLogs(job: DeploymentJob) {
   selected.value = job
   selectedContainer.value = job.containerId || latestContainer(job.app)

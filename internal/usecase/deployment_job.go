@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -17,21 +18,30 @@ import (
 )
 
 type DeploymentJob struct {
-	ID          string     `json:"id"`
-	Namespace   string     `json:"namespace"`
-	App         string     `json:"app"`
-	SourceType  string     `json:"sourceType,omitempty"`
-	SourceRef   string     `json:"sourceRef,omitempty"`
-	Commit      string     `json:"commit,omitempty"`
-	Version     string     `json:"version,omitempty"`
-	Status      string     `json:"status"`
-	ContainerID string     `json:"containerId,omitempty"`
-	IP          []string   `json:"ip,omitempty"`
-	Logs        string     `json:"logs"`
-	Error       string     `json:"error,omitempty"`
-	StartedAt   time.Time  `json:"startedAt"`
-	FinishedAt  *time.Time `json:"finishedAt,omitempty"`
-	Deleted     bool       `json:"deleted,omitempty"`
+	ID            string     `json:"id"`
+	Namespace     string     `json:"namespace"`
+	App           string     `json:"app"`
+	SourceType    string     `json:"sourceType,omitempty"`
+	SourceRef     string     `json:"sourceRef,omitempty"`
+	Commit        string     `json:"commit,omitempty"`
+	Version       string     `json:"version,omitempty"`
+	Status        string     `json:"status"`
+	ContainerID   string     `json:"containerId,omitempty"`
+	IP            []string   `json:"ip,omitempty"`
+	Logs          string     `json:"logs"`
+	Error         string     `json:"error,omitempty"`
+	StartedAt     time.Time  `json:"startedAt"`
+	FinishedAt    *time.Time `json:"finishedAt,omitempty"`
+	Deleted       bool       `json:"deleted,omitempty"`
+	RestartPolicy string     `json:"restart_policy,omitempty"`
+	LogDriver     string     `json:"log_driver,omitempty"`
+	LogMaxSize    string     `json:"log_max_size,omitempty"`
+	LogMaxFile    int        `json:"log_max_file,omitempty"`
+	NeedsRecreate bool       `json:"needs_recreate,omitempty"`
+	SLSProject    string     `json:"sls_project,omitempty"`
+	SLSLogstore   string     `json:"sls_logstore,omitempty"`
+	SLSEndpoint   string     `json:"sls_endpoint,omitempty"`
+	SLSConfigName string     `json:"sls_config_name,omitempty"`
 }
 
 type deploymentJobState struct {
@@ -79,6 +89,10 @@ func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
 	if !found {
 		return DeploymentJob{}, ErrAppNotFound
 	}
+	runtimeConfig, normalized, err := deploymentRuntimeConfig(opt.ContainerEditOptions)
+	if err != nil {
+		return DeploymentJob{}, err
+	}
 
 	key := opt.Namespace + "/" + opt.Name
 	deploymentJobs.Lock()
@@ -97,6 +111,10 @@ func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
 		ID: id, Namespace: opt.Namespace, App: opt.Name,
 		SourceType: sourceType, SourceRef: sourceRef, Commit: opt.Commit,
 		Status: "running", StartedAt: time.Now(),
+		RestartPolicy: normalized.RestartPolicy, LogDriver: normalized.LogDriver,
+		LogMaxSize: normalized.LogMaxSize, LogMaxFile: normalized.LogMaxFile,
+		SLSProject: normalized.SLSProject, SLSLogstore: normalized.SLSLogstore,
+		SLSEndpoint: normalized.SLSEndpoint, SLSConfigName: normalized.SLSConfigName,
 	}}
 	deploymentJobs.jobs[id] = job
 	deploymentJobs.active[key] = id
@@ -107,6 +125,7 @@ func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
 		_, _ = fmt.Fprintf(job, "[%s] deployment started\n", time.Now().Format(time.RFC3339))
 		deployer, err := service.NewAppDeployerWithLog(&app, job)
 		if err == nil {
+			deployer.WithRuntimeConfig(runtimeConfig)
 			err = deployer.Deploy(&opt.Branch, &opt.Commit, &opt.Tag)
 		}
 		finishedAt := time.Now()
@@ -131,6 +150,33 @@ func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
 	}()
 
 	return job.snapshot(), nil
+}
+
+func deploymentRuntimeConfig(edit ContainerEditOptions) (service.DeploymentRuntimeConfig, ContainerEditOptions, error) {
+	policy, err := normalizeRestartPolicy(edit.RestartPolicy)
+	if err != nil {
+		return service.DeploymentRuntimeConfig{}, edit, err
+	}
+	if edit.LogDriver == "" {
+		edit.LogDriver = "local"
+	}
+	if edit.LogDriver == "aliyun-sls" && (edit.SLSProject == "" || edit.SLSLogstore == "" || edit.SLSEndpoint == "" || edit.SLSConfigName == "") {
+		return service.DeploymentRuntimeConfig{}, edit, fmt.Errorf("aliyun sls endpoint, project, logstore and config name are required")
+	}
+	logConfig, err := normalizeLogConfig(edit.LogDriver, edit.LogMaxSize, edit.LogMaxFile)
+	if err != nil {
+		return service.DeploymentRuntimeConfig{}, edit, err
+	}
+	edit.RestartPolicy = string(policy)
+	edit.LogMaxSize = logConfig.Config["max-size"]
+	edit.LogMaxFile, _ = strconv.Atoi(logConfig.Config["max-file"])
+	return service.DeploymentRuntimeConfig{
+		RestartPolicy: policy, LogConfig: logConfig, LogDriver: edit.LogDriver,
+		LogMaxSize: edit.LogMaxSize, LogMaxFile: edit.LogMaxFile,
+		SLSProject: edit.SLSProject, SLSLogstore: edit.SLSLogstore,
+		SLSEndpoint: edit.SLSEndpoint, SLSConfigName: edit.SLSConfigName,
+		Labels: slsContainerLabels(edit),
+	}, edit, nil
 }
 
 func deploymentSource(opt DeployAppOptions) (string, string) {
@@ -217,7 +263,25 @@ func refreshDeploymentRuntime(job *DeploymentJob) {
 		return
 	}
 	inspect, err := docker.InspectContainer(job.ContainerID)
-	if err != nil || inspect.State == nil || !inspect.State.Running {
+	if err != nil {
+		return
+	}
+	actualRestart, actualDriver, actualSize, actualFile, slsEnabled := "", "", "", 0, false
+	if inspect.HostConfig != nil {
+		actualRestart = string(inspect.HostConfig.RestartPolicy.Name)
+		actualDriver = inspect.HostConfig.LogConfig.Type
+		actualSize = inspect.HostConfig.LogConfig.Config["max-size"]
+		actualFile, _ = strconv.Atoi(inspect.HostConfig.LogConfig.Config["max-file"])
+	}
+	if inspect.Config != nil {
+		slsEnabled = inspect.Config.Labels["dockflow.sls.enabled"] == "true"
+	}
+	desiredDriver := job.LogDriver
+	if desiredDriver == "aliyun-sls" {
+		desiredDriver = "json-file"
+	}
+	job.NeedsRecreate = job.LogDriver != "" && (job.RestartPolicy != actualRestart || desiredDriver != actualDriver || job.LogMaxSize != actualSize || job.LogMaxFile != actualFile || (job.LogDriver == "aliyun-sls") != slsEnabled)
+	if inspect.State == nil || !inspect.State.Running {
 		job.Status = "stopped"
 		return
 	}
@@ -229,6 +293,79 @@ func refreshDeploymentRuntime(job *DeploymentJob) {
 			}
 		}
 	}
+}
+
+func UpdateDeploymentJobConfig(nsName, appName, id string, edit ContainerEditOptions) (DeploymentJob, error) {
+	if err := ensureDeploymentJobsLoaded(); err != nil {
+		return DeploymentJob{}, err
+	}
+	runtimeConfig, normalized, err := deploymentRuntimeConfig(edit)
+	if err != nil {
+		return DeploymentJob{}, err
+	}
+	deploymentJobs.RLock()
+	job := deploymentJobs.jobs[id]
+	deploymentJobs.RUnlock()
+	if job == nil {
+		return DeploymentJob{}, fmt.Errorf("deployment job not found")
+	}
+	snapshot := job.snapshot()
+	if snapshot.Namespace != nsName || snapshot.App != appName || snapshot.Deleted || snapshot.Status == "running" || snapshot.ContainerID == "" {
+		return DeploymentJob{}, fmt.Errorf("deployment job cannot be edited")
+	}
+	newContainerID := snapshot.ContainerID
+	if normalized.ApplyNow {
+		newContainerID, err = docker.RecreateContainer(snapshot.ContainerID, runtimeConfig.RestartPolicy, runtimeConfig.LogConfig, runtimeConfig.Labels)
+		if err != nil {
+			return DeploymentJob{}, err
+		}
+		ns, loadErr := domain.NewNamespace(nsName)
+		if loadErr != nil {
+			return DeploymentJob{}, loadErr
+		}
+		if ns == nil {
+			return DeploymentJob{}, ErrNamespaceNotFound
+		}
+		app, found := ns.FindApp(appName)
+		if !found {
+			return DeploymentJob{}, ErrAppNotFound
+		}
+		for index := range app.Deploy {
+			if app.Deploy[index].ContainerId == snapshot.ContainerID {
+				app.Deploy[index].ContainerId = newContainerID
+				app.Deploy[index].RestartPolicy = normalized.RestartPolicy
+				app.Deploy[index].LogDriver = normalized.LogDriver
+				app.Deploy[index].LogMaxSize = normalized.LogMaxSize
+				app.Deploy[index].LogMaxFile = normalized.LogMaxFile
+				app.Deploy[index].SLSProject = normalized.SLSProject
+				app.Deploy[index].SLSLogstore = normalized.SLSLogstore
+				app.Deploy[index].SLSEndpoint = normalized.SLSEndpoint
+				app.Deploy[index].SLSConfigName = normalized.SLSConfigName
+				break
+			}
+		}
+		if err := domain.SaveApp(app); err != nil {
+			return DeploymentJob{}, err
+		}
+	}
+	job.mu.Lock()
+	job.ContainerID = newContainerID
+	job.RestartPolicy = normalized.RestartPolicy
+	job.LogDriver = normalized.LogDriver
+	job.LogMaxSize = normalized.LogMaxSize
+	job.LogMaxFile = normalized.LogMaxFile
+	job.SLSProject = normalized.SLSProject
+	job.SLSLogstore = normalized.SLSLogstore
+	job.SLSEndpoint = normalized.SLSEndpoint
+	job.SLSConfigName = normalized.SLSConfigName
+	job.NeedsRecreate = !normalized.ApplyNow
+	job.mu.Unlock()
+	if err := persistDeploymentJobs(); err != nil {
+		return DeploymentJob{}, err
+	}
+	result := job.snapshot()
+	refreshDeploymentRuntime(&result)
+	return result, nil
 }
 
 func DeleteDeploymentJob(nsName, appName, id string) error {

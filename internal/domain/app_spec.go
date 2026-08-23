@@ -20,25 +20,32 @@ type Trigger struct {
 }
 
 type AppDeploy struct {
-	ContainerId string `json:"containerId"`
-	Version     string `json:"version"`
-	Url         string `json:"url"`
+	ContainerId   string `json:"containerId"`
+	Version       string `json:"version"`
+	Url           string `json:"url"`
+	RestartPolicy string `json:"restart_policy,omitempty"`
+	LogDriver     string `json:"log_driver,omitempty"`
+	LogMaxSize    string `json:"log_max_size,omitempty"`
+	LogMaxFile    int    `json:"log_max_file,omitempty"`
+	SLSProject    string `json:"sls_project,omitempty"`
+	SLSLogstore   string `json:"sls_logstore,omitempty"`
+	SLSEndpoint   string `json:"sls_endpoint,omitempty"`
+	SLSConfigName string `json:"sls_config_name,omitempty"`
 }
 
 type AppSpec struct {
-	Namespace     string             `json:"namespace"`
-	Name          string             `json:"name"`
-	CPU           float64            `json:"cpu"`    // CPU cores
-	Memory        int                `json:"memory"` // Memory in GB
-	RestartPolicy string             `json:"restart_policy,omitempty"`
-	Repo          string             `json:"repo"`    // Git repository
-	Token         string             `json:"token"`   // Git access token (optional)
-	Trigger       Trigger            `json:"trigger"` // Deploy trigger
-	Envs          []Env              `json:"env"`     // Environment variables
-	URLs          []AppURL           `json:"url"`     // Access rules
-	Deploy        []AppDeploy        `json:"deploy"`
-	BuildArg      map[string]*string `json:"buildArg"`
-	Secret        string             `json:"secret"`
+	Namespace string             `json:"namespace"`
+	Name      string             `json:"name"`
+	CPU       float64            `json:"cpu"`     // CPU cores
+	Memory    int                `json:"memory"`  // Memory in GB
+	Repo      string             `json:"repo"`    // Git repository
+	Token     string             `json:"token"`   // Git access token (optional)
+	Trigger   Trigger            `json:"trigger"` // Deploy trigger
+	Envs      []Env              `json:"env"`     // Environment variables
+	URLs      []AppURL           `json:"url"`     // Access rules
+	Deploy    []AppDeploy        `json:"deploy"`
+	BuildArg  map[string]*string `json:"buildArg"`
+	Secret    string             `json:"secret"`
 }
 
 func SaveApp(app AppSpec) error {

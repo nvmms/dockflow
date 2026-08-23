@@ -25,9 +25,23 @@ var (
 //
 
 type AppDeployer struct {
-	app *domain.AppSpec
-	ns  *domain.Namespace
-	log io.Writer
+	app     *domain.AppSpec
+	ns      *domain.Namespace
+	log     io.Writer
+	runtime DeploymentRuntimeConfig
+}
+
+type DeploymentRuntimeConfig struct {
+	RestartPolicy container.RestartPolicyMode
+	LogConfig     container.LogConfig
+	LogDriver     string
+	LogMaxSize    string
+	LogMaxFile    int
+	SLSProject    string
+	SLSLogstore   string
+	SLSEndpoint   string
+	SLSConfigName string
+	Labels        map[string]string
 }
 
 //
@@ -46,7 +60,16 @@ func NewAppDeployer(app *domain.AppSpec) (*AppDeployer, error) {
 		app: app,
 		ns:  ns,
 		log: io.Discard,
+		runtime: DeploymentRuntimeConfig{
+			RestartPolicy: container.RestartPolicyUnlessStopped,
+			LogConfig:     container.LogConfig{Type: "local", Config: map[string]string{"max-size": "10m", "max-file": "3"}},
+			LogDriver:     "local", LogMaxSize: "10m", LogMaxFile: 3,
+		},
 	}, nil
+}
+
+func (d *AppDeployer) WithRuntimeConfig(config DeploymentRuntimeConfig) {
+	d.runtime = config
 }
 
 func NewAppDeployerWithLog(app *domain.AppSpec, output io.Writer) (*AppDeployer, error) {
@@ -228,9 +251,11 @@ func (d *AppDeployer) deployVersion(
 	}
 
 	d.app.Deploy = append(d.app.Deploy, domain.AppDeploy{
-		ContainerId: containerId,
-		Version:     version,
-		Url:         "/" + version,
+		ContainerId: containerId, Version: version, Url: "/" + version,
+		RestartPolicy: string(d.runtime.RestartPolicy), LogDriver: d.runtime.LogDriver,
+		LogMaxSize: d.runtime.LogMaxSize, LogMaxFile: d.runtime.LogMaxFile,
+		SLSProject: d.runtime.SLSProject, SLSLogstore: d.runtime.SLSLogstore,
+		SLSEndpoint: d.runtime.SLSEndpoint, SLSConfigName: d.runtime.SLSConfigName,
 	})
 
 	return domain.SaveApp(*d.app)
@@ -253,11 +278,8 @@ func (d *AppDeployer) runApp(image, version string) (string, error) {
 
 	// ---------- run options ----------
 	opts := docker.NewRunOptions(containerName, image)
-	restartPolicy := container.RestartPolicyUnlessStopped
-	if d.app.RestartPolicy != "" {
-		restartPolicy = container.RestartPolicyMode(d.app.RestartPolicy)
-	}
-	opts.WithRestart(restartPolicy)
+	opts.WithRestart(d.runtime.RestartPolicy)
+	opts.WithLogging(d.runtime.LogConfig.Type, d.runtime.LogConfig.Config["max-size"], d.runtime.LogMaxFile)
 
 	opts.WithCpu(d.app.CPU)
 	opts.WithMemory(float64(d.app.Memory))
@@ -271,6 +293,9 @@ func (d *AppDeployer) runApp(image, version string) (string, error) {
 	opts.WithLabel("dockflow.namespace", d.ns.Name)
 	opts.WithLabel("dockflow.name", d.app.Name)
 	opts.WithLabel("dockflow.version", version)
+	for key, value := range d.runtime.Labels {
+		opts.WithLabel(key, value)
+	}
 
 	// ---------- traefik ----------
 	// opts.WithLabel("traefik.enable", "true")

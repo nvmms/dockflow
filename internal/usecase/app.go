@@ -49,11 +49,6 @@ func CreateApp(app domain.AppSpec) error {
 	if app.Repo == "" {
 		return fmt.Errorf("repo is required")
 	}
-	restartPolicy, err := normalizeRestartPolicy(app.RestartPolicy)
-	if err != nil {
-		return err
-	}
-	app.RestartPolicy = string(restartPolicy)
 	// if app.Token == "" {
 	// 	return fmt.Errorf("token is required")
 	// }
@@ -165,25 +160,6 @@ func UpdateApp(nsName, appName string, updated domain.AppSpec) error {
 	if updated.Trigger.Rule == "" {
 		return fmt.Errorf("trigger rule is required")
 	}
-	restartPolicy, err := normalizeRestartPolicy(updated.RestartPolicy)
-	if err != nil {
-		return err
-	}
-	updated.RestartPolicy = string(restartPolicy)
-	if updated.RestartPolicy != current.RestartPolicy {
-		for _, deployment := range current.Deploy {
-			containerID, err := docker.HasContainer(deployment.ContainerId)
-			if err != nil {
-				return err
-			}
-			if containerID == "" {
-				continue
-			}
-			if err := docker.UpdateContainerRestartPolicy(containerID, restartPolicy); err != nil {
-				return fmt.Errorf("update restart policy for container %s: %w", containerID[:12], err)
-			}
-		}
-	}
 	for _, env := range updated.Envs {
 		if env.Key == "" {
 			return fmt.Errorf("env key is empty")
@@ -251,6 +227,7 @@ type DeployAppOptions struct {
 	Branch    string
 	Commit    string
 	Tag       string
+	ContainerEditOptions
 }
 
 func DeployApp(opt DeployAppOptions) error {
