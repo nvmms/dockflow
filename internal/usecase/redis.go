@@ -5,6 +5,7 @@ import (
 	"dockflow/internal/service/docker"
 	"errors"
 	"fmt"
+	"strconv"
 )
 
 var (
@@ -40,6 +41,21 @@ func CreateRedis(redis domain.RedisSpec) error {
 	}
 	redis.RestartPolicy = string(restartPolicy)
 	opts.WithRestart(restartPolicy)
+	logicalLogDriver := redis.LogDriver
+	if logicalLogDriver == "" {
+		logicalLogDriver = "local"
+	}
+	logConfig, err := normalizeLogConfig(logicalLogDriver, redis.LogMaxSize, redis.LogMaxFile)
+	if err != nil {
+		return err
+	}
+	redis.LogDriver, redis.LogMaxSize = logicalLogDriver, logConfig.Config["max-size"]
+	redis.LogMaxFile, _ = strconv.Atoi(logConfig.Config["max-file"])
+	opts.WithLogging(logConfig.Type, redis.LogMaxSize, redis.LogMaxFile)
+	for key, value := range slsLabels(redis.LogDriver, redis.SLSProject, redis.SLSLogstore, redis.SLSEndpoint, redis.SLSConfigName) {
+		opts.WithLabel(key, value)
+	}
+	opts.WithVolume(fmt.Sprintf("dockflow-redisvolume-%s-%s", redis.Namespace, redis.Name), "/data")
 
 	opts.WithNetwork(ns.Network)
 	opts.WithCpu(redis.CPU)
@@ -93,7 +109,7 @@ func ListRedis(namespaceName string) ([]domain.RedisSpec, error) {
 
 	result := append([]domain.RedisSpec(nil), ns.Redis...)
 	for i := range result {
-		status, ips, restartPolicy, err := containerRuntimeStatus(result[i].ContainerId)
+		status, ips, restartPolicy, logDriver, logSize, logFile, slsEnabled, err := containerRuntimeStatus(result[i].ContainerId)
 		if err != nil {
 			return nil, err
 		}
@@ -102,6 +118,11 @@ func ListRedis(namespaceName string) ([]domain.RedisSpec, error) {
 		if restartPolicy != "" {
 			result[i].RestartPolicy = restartPolicy
 		}
+		desiredDriver := result[i].LogDriver
+		if desiredDriver == "aliyun-sls" {
+			desiredDriver = "json-file"
+		}
+		result[i].NeedsRecreate = result[i].LogDriver != "" && (desiredDriver != logDriver || result[i].LogMaxSize != logSize || result[i].LogMaxFile != logFile || (result[i].LogDriver == "aliyun-sls") != slsEnabled)
 	}
 	return result, nil
 }
@@ -121,10 +142,17 @@ func SetRedisRunning(namespaceName, name string, running bool) error {
 	return setContainerRunning(redis.ContainerId, running)
 }
 
-func UpdateRedisRestartPolicy(namespaceName, name, value string) error {
-	policy, err := normalizeRestartPolicy(value)
+func UpdateRedisConfig(namespaceName, name string, edit ContainerEditOptions) error {
+	policy, err := normalizeRestartPolicy(edit.RestartPolicy)
 	if err != nil {
 		return err
+	}
+	logConfig, err := normalizeLogConfig(edit.LogDriver, edit.LogMaxSize, edit.LogMaxFile)
+	if err != nil {
+		return err
+	}
+	if edit.LogDriver == "aliyun-sls" && (edit.SLSProject == "" || edit.SLSLogstore == "" || edit.SLSEndpoint == "" || edit.SLSConfigName == "") {
+		return fmt.Errorf("Aliyun SLS configuration is incomplete")
 	}
 	ns, err := domain.NewNamespace(namespaceName)
 	if err != nil {
@@ -144,24 +172,50 @@ func UpdateRedisRestartPolicy(namespaceName, name, value string) error {
 	if containerID == "" {
 		return fmt.Errorf("container not found")
 	}
-	if err := docker.UpdateContainerRestartPolicy(containerID, policy); err != nil {
+	if edit.ApplyNow {
+		inspect, err := docker.InspectContainer(containerID)
+		if err != nil {
+			return err
+		}
+		hasDataVolume := false
+		for _, mount := range inspect.Mounts {
+			if mount.Destination == "/data" {
+				hasDataVolume = true
+				break
+			}
+		}
+		if !hasDataVolume {
+			return fmt.Errorf("legacy Redis container has no persistent /data volume; immediate recreation is unsafe")
+		}
+		containerID, err = docker.RecreateContainer(containerID, policy, logConfig, slsContainerLabels(edit))
+		if err != nil {
+			return err
+		}
+	} else if err := docker.UpdateContainerRestartPolicy(containerID, policy); err != nil {
 		return err
 	}
 	ns.Redis[index].RestartPolicy = string(policy)
+	ns.Redis[index].LogDriver = edit.LogDriver
+	ns.Redis[index].SLSProject, ns.Redis[index].SLSLogstore, ns.Redis[index].SLSEndpoint, ns.Redis[index].SLSConfigName = edit.SLSProject, edit.SLSLogstore, edit.SLSEndpoint, edit.SLSConfigName
+	ns.Redis[index].LogMaxSize = logConfig.Config["max-size"]
+	ns.Redis[index].LogMaxFile, _ = strconv.Atoi(logConfig.Config["max-file"])
+	if edit.ApplyNow {
+		ns.Redis[index].ContainerId = containerID
+	}
 	return ns.Save()
 }
 
-func containerRuntimeStatus(containerID string) (string, []string, string, error) {
+func containerRuntimeStatus(containerID string) (string, []string, string, string, string, int, bool, error) {
 	existingID, err := docker.HasContainer(containerID)
 	if err != nil {
-		return "", nil, "", err
+		return "", nil, "", "", "", 0, false, err
 	}
 	if existingID == "" {
-		return "missing", nil, "", nil
+		return "missing", nil, "", "", "", 0, false, nil
 	}
 	inspect, err := docker.InspectContainer(existingID)
 	if err != nil {
-		return "", nil, "", err
+		return "", nil, "", "", "", 0, false, err
 	}
 	status := "stopped"
 	if inspect.State != nil {
@@ -183,7 +237,14 @@ func containerRuntimeStatus(containerID string) (string, []string, string, error
 	if inspect.HostConfig != nil {
 		restartPolicy = string(inspect.HostConfig.RestartPolicy.Name)
 	}
-	return status, ips, restartPolicy, nil
+	logDriver, logSize, logFile := "", "", 0
+	if inspect.HostConfig != nil {
+		logDriver = inspect.HostConfig.LogConfig.Type
+		logSize = inspect.HostConfig.LogConfig.Config["max-size"]
+		logFile, _ = strconv.Atoi(inspect.HostConfig.LogConfig.Config["max-file"])
+	}
+	slsEnabled := inspect.Config != nil && inspect.Config.Labels["dockflow.sls.enabled"] == "true"
+	return status, ips, restartPolicy, logDriver, logSize, logFile, slsEnabled, nil
 }
 
 func setContainerRunning(containerID string, running bool) error {

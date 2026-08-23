@@ -293,6 +293,72 @@ func (o *ContainerRunOptions) WithRestart(mode container.RestartPolicyMode) {
 	o.RestartPolicy = container.RestartPolicy{Name: mode}
 }
 
+func (o *ContainerRunOptions) WithLogging(driver, maxSize string, maxFile int) {
+	if driver == "" {
+		return
+	}
+	config := map[string]string{}
+	if maxSize != "" {
+		config["max-size"] = maxSize
+	}
+	if maxFile > 0 {
+		config["max-file"] = fmt.Sprintf("%d", maxFile)
+	}
+	o.LogConfig = container.LogConfig{Type: driver, Config: config}
+}
+
+// RecreateContainer applies create-only settings while preserving the image,
+// environment, mounts, ports and network attachments of the old container.
+func RecreateContainer(id string, restart container.RestartPolicyMode, logConfig container.LogConfig, extraLabels map[string]string) (string, error) {
+	inspect, err := InspectContainer(id)
+	if err != nil {
+		return "", err
+	}
+	if inspect.Config == nil || inspect.HostConfig == nil {
+		return "", fmt.Errorf("container configuration is unavailable")
+	}
+	name := strings.TrimPrefix(inspect.Name, "/")
+	wasRunning := inspect.State != nil && inspect.State.Running
+	if wasRunning {
+		if err := StopContainer(id, nil); err != nil {
+			return "", err
+		}
+	}
+	if err := RemoveContainer(id, false); err != nil {
+		return "", err
+	}
+	hostConfig := *inspect.HostConfig
+	hostConfig.RestartPolicy = container.RestartPolicy{Name: restart}
+	hostConfig.LogConfig = logConfig
+	if inspect.Config.Labels == nil {
+		inspect.Config.Labels = map[string]string{}
+	}
+	for key := range inspect.Config.Labels {
+		if strings.HasPrefix(key, "dockflow.sls.") {
+			delete(inspect.Config.Labels, key)
+		}
+	}
+	for key, value := range extraLabels {
+		inspect.Config.Labels[key] = value
+	}
+	networking := &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{}}
+	if inspect.NetworkSettings != nil {
+		for networkName := range inspect.NetworkSettings.Networks {
+			networking.EndpointsConfig[networkName] = &network.EndpointSettings{}
+		}
+	}
+	response, err := Client().ContainerCreate(Ctx(), inspect.Config, &hostConfig, networking, nil, name)
+	if err != nil {
+		return "", err
+	}
+	if wasRunning {
+		if err := StartContainer(response.ID); err != nil {
+			return response.ID, err
+		}
+	}
+	return response.ID, nil
+}
+
 func (o *ContainerRunOptions) WithNetwork(name string) {
 	if o.EndpointsConfig == nil {
 		o.EndpointsConfig = map[string]*network.EndpointSettings{}

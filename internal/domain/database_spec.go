@@ -13,6 +13,14 @@ type DatabaseSpec struct {
 	Ip            []string `json:"ip"`
 	Remote        bool     `json:"remote"`
 	RestartPolicy string   `json:"restart_policy,omitempty"`
+	LogDriver     string   `json:"log_driver,omitempty"`
+	LogMaxSize    string   `json:"log_max_size,omitempty"`
+	LogMaxFile    int      `json:"log_max_file,omitempty"`
+	SLSProject    string   `json:"sls_project,omitempty"`
+	SLSLogstore   string   `json:"sls_logstore,omitempty"`
+	SLSEndpoint   string   `json:"sls_endpoint,omitempty"`
+	SLSConfigName string   `json:"sls_config_name,omitempty"`
+	NeedsRecreate bool     `json:"needs_recreate,omitempty"`
 	Status        string   `json:"status,omitempty"`
 	ImportError   string   `json:"import_error,omitempty"`
 }

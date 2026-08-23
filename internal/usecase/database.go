@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -82,6 +84,20 @@ func Createdatabase(database domain.DatabaseSpec) error {
 	}
 	database.RestartPolicy = string(restartPolicy)
 	opts.WithRestart(restartPolicy)
+	logicalLogDriver := database.LogDriver
+	if logicalLogDriver == "" {
+		logicalLogDriver = "local"
+	}
+	logConfig, err := normalizeLogConfig(logicalLogDriver, database.LogMaxSize, database.LogMaxFile)
+	if err != nil {
+		return err
+	}
+	database.LogDriver, database.LogMaxSize = logicalLogDriver, logConfig.Config["max-size"]
+	database.LogMaxFile, _ = strconv.Atoi(logConfig.Config["max-file"])
+	opts.WithLogging(logConfig.Type, database.LogMaxSize, database.LogMaxFile)
+	for key, value := range slsLabels(database.LogDriver, database.SLSProject, database.SLSLogstore, database.SLSEndpoint, database.SLSConfigName) {
+		opts.WithLabel(key, value)
+	}
 	opts.WithNetwork(ns.Network)
 	opts.WithCpu(database.CPU)
 	opts.WithMemory(database.Memory)
@@ -129,6 +145,48 @@ func normalizeRestartPolicy(value string) (container.RestartPolicyMode, error) {
 	}
 }
 
+func normalizeLogConfig(driver, maxSize string, maxFile int) (container.LogConfig, error) {
+	if driver == "" {
+		driver = "local"
+	}
+	if driver == "aliyun-sls" {
+		driver = "json-file"
+	}
+	if driver != "local" && driver != "json-file" {
+		return container.LogConfig{}, fmt.Errorf("invalid log driver")
+	}
+	if maxSize == "" {
+		maxSize = "10m"
+	}
+	if !regexp.MustCompile(`^[1-9][0-9]*[kKmMgG]$`).MatchString(maxSize) {
+		return container.LogConfig{}, fmt.Errorf("invalid log max size")
+	}
+	if maxFile == 0 {
+		maxFile = 3
+	}
+	if maxFile < 1 || maxFile > 100 {
+		return container.LogConfig{}, fmt.Errorf("invalid log max file")
+	}
+	return container.LogConfig{Type: driver, Config: map[string]string{"max-size": maxSize, "max-file": strconv.Itoa(maxFile)}}, nil
+}
+
+func slsContainerLabels(edit ContainerEditOptions) map[string]string {
+	return slsLabels(edit.LogDriver, edit.SLSProject, edit.SLSLogstore, edit.SLSEndpoint, edit.SLSConfigName)
+}
+
+func slsLabels(driver, project, logstore, endpoint, configName string) map[string]string {
+	if driver != "aliyun-sls" {
+		return nil
+	}
+	return map[string]string{
+		"dockflow.sls.enabled":  "true",
+		"dockflow.sls.project":  project,
+		"dockflow.sls.logstore": logstore,
+		"dockflow.sls.endpoint": endpoint,
+		"dockflow.sls.config":   configName,
+	}
+}
+
 func Listdatabase(namespaceName string) ([]domain.DatabaseSpec, error) {
 	ns, err := domain.NewNamespace(namespaceName)
 	if err != nil {
@@ -140,7 +198,7 @@ func Listdatabase(namespaceName string) ([]domain.DatabaseSpec, error) {
 
 	result := append([]domain.DatabaseSpec(nil), ns.Database...)
 	for i := range result {
-		status, ips, restartPolicy, err := containerRuntimeStatus(result[i].ContainerId)
+		status, ips, restartPolicy, logDriver, logSize, logFile, slsEnabled, err := containerRuntimeStatus(result[i].ContainerId)
 		if err != nil {
 			return nil, err
 		}
@@ -149,6 +207,11 @@ func Listdatabase(namespaceName string) ([]domain.DatabaseSpec, error) {
 		if restartPolicy != "" {
 			result[i].RestartPolicy = restartPolicy
 		}
+		desiredDriver := result[i].LogDriver
+		if desiredDriver == "aliyun-sls" {
+			desiredDriver = "json-file"
+		}
+		result[i].NeedsRecreate = result[i].LogDriver != "" && (desiredDriver != logDriver || result[i].LogMaxSize != logSize || result[i].LogMaxFile != logFile || (result[i].LogDriver == "aliyun-sls") != slsEnabled)
 		importState := getDatabaseImportStatus(namespaceName, result[i].Name)
 		if importState.Status == "importing" && status == "running" {
 			result[i].Status = "importing"
@@ -169,8 +232,22 @@ func SetDatabaseRunning(namespaceName, name string, running bool) error {
 	return setContainerRunning(database.ContainerId, running)
 }
 
-func UpdateDatabaseRestartPolicy(namespaceName, name, value string) error {
-	policy, err := normalizeRestartPolicy(value)
+type ContainerEditOptions struct {
+	RestartPolicy, LogDriver, LogMaxSize                string
+	LogMaxFile                                          int
+	ApplyNow                                            bool
+	SLSProject, SLSLogstore, SLSEndpoint, SLSConfigName string
+}
+
+func UpdateDatabaseConfig(namespaceName, name string, edit ContainerEditOptions) error {
+	policy, err := normalizeRestartPolicy(edit.RestartPolicy)
+	if err != nil {
+		return err
+	}
+	if edit.LogDriver == "aliyun-sls" && (edit.SLSProject == "" || edit.SLSLogstore == "" || edit.SLSEndpoint == "" || edit.SLSConfigName == "") {
+		return fmt.Errorf("Aliyun SLS configuration is incomplete")
+	}
+	logConfig, err := normalizeLogConfig(edit.LogDriver, edit.LogMaxSize, edit.LogMaxFile)
 	if err != nil {
 		return err
 	}
@@ -192,10 +269,22 @@ func UpdateDatabaseRestartPolicy(namespaceName, name, value string) error {
 	if containerID == "" {
 		return fmt.Errorf("container not found")
 	}
-	if err := docker.UpdateContainerRestartPolicy(containerID, policy); err != nil {
+	if edit.ApplyNow {
+		containerID, err = docker.RecreateContainer(containerID, policy, logConfig, slsContainerLabels(edit))
+		if err != nil {
+			return err
+		}
+	} else if err := docker.UpdateContainerRestartPolicy(containerID, policy); err != nil {
 		return err
 	}
 	ns.Database[index].RestartPolicy = string(policy)
+	ns.Database[index].LogDriver = edit.LogDriver
+	ns.Database[index].SLSProject, ns.Database[index].SLSLogstore, ns.Database[index].SLSEndpoint, ns.Database[index].SLSConfigName = edit.SLSProject, edit.SLSLogstore, edit.SLSEndpoint, edit.SLSConfigName
+	ns.Database[index].LogMaxSize = logConfig.Config["max-size"]
+	ns.Database[index].LogMaxFile, _ = strconv.Atoi(logConfig.Config["max-file"])
+	if edit.ApplyNow {
+		ns.Database[index].ContainerId = containerID
+	}
 	return ns.Save()
 }
 

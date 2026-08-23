@@ -304,11 +304,19 @@ func handleDatabases(w http.ResponseWriter, r *http.Request, ns string, rest []s
 	if len(rest) == 1 && r.Method == http.MethodPut {
 		var in struct {
 			RestartPolicy string `json:"restart_policy"`
+			LogDriver     string `json:"log_driver"`
+			LogMaxSize    string `json:"log_max_size"`
+			LogMaxFile    int    `json:"log_max_file"`
+			ApplyNow      bool   `json:"apply_now"`
+			SLSProject    string `json:"sls_project"`
+			SLSLogstore   string `json:"sls_logstore"`
+			SLSEndpoint   string `json:"sls_endpoint"`
+			SLSConfigName string `json:"sls_config_name"`
 		}
 		if err := decodeJSON(w, r, &in); err != nil {
 			return
 		}
-		if err := usecase.UpdateDatabaseRestartPolicy(ns, name, in.RestartPolicy); err != nil {
+		if err := usecase.UpdateDatabaseConfig(ns, name, usecase.ContainerEditOptions{RestartPolicy: in.RestartPolicy, LogDriver: in.LogDriver, LogMaxSize: in.LogMaxSize, LogMaxFile: in.LogMaxFile, ApplyNow: in.ApplyNow, SLSProject: in.SLSProject, SLSLogstore: in.SLSLogstore, SLSEndpoint: in.SLSEndpoint, SLSConfigName: in.SLSConfigName}); err != nil {
 			writeError(w, err)
 			return
 		}
@@ -414,11 +422,19 @@ func handleRedis(w http.ResponseWriter, r *http.Request, ns string, rest []strin
 	if len(rest) == 1 && r.Method == http.MethodPut {
 		var in struct {
 			RestartPolicy string `json:"restart_policy"`
+			LogDriver     string `json:"log_driver"`
+			LogMaxSize    string `json:"log_max_size"`
+			LogMaxFile    int    `json:"log_max_file"`
+			ApplyNow      bool   `json:"apply_now"`
+			SLSProject    string `json:"sls_project"`
+			SLSLogstore   string `json:"sls_logstore"`
+			SLSEndpoint   string `json:"sls_endpoint"`
+			SLSConfigName string `json:"sls_config_name"`
 		}
 		if err := decodeJSON(w, r, &in); err != nil {
 			return
 		}
-		if err := usecase.UpdateRedisRestartPolicy(ns, rest[0], in.RestartPolicy); err != nil {
+		if err := usecase.UpdateRedisConfig(ns, rest[0], usecase.ContainerEditOptions{RestartPolicy: in.RestartPolicy, LogDriver: in.LogDriver, LogMaxSize: in.LogMaxSize, LogMaxFile: in.LogMaxFile, ApplyNow: in.ApplyNow, SLSProject: in.SLSProject, SLSLogstore: in.SLSLogstore, SLSEndpoint: in.SLSEndpoint, SLSConfigName: in.SLSConfigName}); err != nil {
 			writeError(w, err)
 			return
 		}

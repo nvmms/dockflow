@@ -36,6 +36,14 @@ export interface AppRecord {
   cpu: number
   memory: number
   restart_policy?: 'unless-stopped' | 'always' | 'on-failure' | 'no'
+  log_driver?: 'local' | 'json-file' | 'aliyun-sls'
+  log_max_size?: string
+  log_max_file?: number
+  needs_recreate?: boolean
+  sls_project?: string
+  sls_logstore?: string
+  sls_endpoint?: string
+  sls_config_name?: string
   repo: string
   trigger: { type: 'branch' | 'tag'; rule: string }
   env: Array<{ key: string; value: string }>
@@ -71,6 +79,14 @@ export interface DatabaseRecord {
   ip: string[]
   remote: boolean
   restart_policy?: 'unless-stopped' | 'always' | 'on-failure' | 'no'
+  log_driver?: 'local' | 'json-file' | 'aliyun-sls'
+  log_max_size?: string
+  log_max_file?: number
+  needs_recreate?: boolean
+  sls_project?: string
+  sls_logstore?: string
+  sls_endpoint?: string
+  sls_config_name?: string
   status?: 'running' | 'stopped' | 'missing' | 'paused' | 'restarting' | 'importing'
   import_error?: string
 }
@@ -86,4 +102,12 @@ export interface RedisRecord {
   ip: string[]
   status?: 'running' | 'stopped' | 'missing' | 'paused' | 'restarting'
   restart_policy?: 'unless-stopped' | 'always' | 'on-failure' | 'no'
+  log_driver?: 'local' | 'json-file' | 'aliyun-sls'
+  log_max_size?: string
+  log_max_file?: number
+  needs_recreate?: boolean
+  sls_project?: string
+  sls_logstore?: string
+  sls_endpoint?: string
+  sls_config_name?: string
 }
