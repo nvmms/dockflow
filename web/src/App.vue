@@ -1,5 +1,6 @@
 <template>
-  <el-container class="app-shell">
+  <router-view v-if="route.meta.public" />
+  <el-container v-else class="app-shell">
     <el-header class="topbar">
       <div class="brand"><span class="brand-mark">D</span><span>DockFlow</span></div>
       <div class="namespace-switcher">
@@ -10,7 +11,7 @@
         <el-button text title="刷新" @click="loadNamespaces">↻</el-button>
         <el-button type="primary" plain @click="namespaceDialog = true">新建</el-button>
       </div>
-      <div class="topbar-status"><span class="status-dot"></span> API 已连接</div>
+      <div class="topbar-status"><span class="status-dot"></span><span>{{ auth.username }}</span><el-button text @click="logout">退出登录</el-button></div>
     </el-header>
     <el-container class="body-shell">
       <el-aside width="216px" class="sidebar">
@@ -46,10 +47,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { api, type Namespace } from './api'
+import { auth } from './auth'
 import Menu from './components/Menu.vue'
 
 const route = useRoute()
@@ -94,7 +96,13 @@ async function createNamespace() {
   } catch (error) { ElMessage.error((error as Error).message) }
   finally { creating.value = false }
 }
-onMounted(loadNamespaces)
+async function logout() {
+  try { await api.post('/auth/logout') } finally { auth.username = ''; await router.replace('/login') }
+}
+function handleUnauthorized() { auth.username = ''; if (route.name !== 'login') router.replace({ name: 'login', query: { redirect: route.fullPath } }) }
+onMounted(() => { window.addEventListener('dockflow:unauthorized', handleUnauthorized); if (!route.meta.public) loadNamespaces() })
+onUnmounted(() => window.removeEventListener('dockflow:unauthorized', handleUnauthorized))
+watch(() => route.meta.public, value => { if (!value && namespaces.value.length === 0) loadNamespaces() })
 watch(() => route.query.namespace, value => {
   if (typeof value === 'string' && namespaces.value.some(item => item.name === value)) currentNamespace.value = value
 })

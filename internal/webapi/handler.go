@@ -17,14 +17,30 @@ const maxJSONBody = 1 << 20
 
 // NewHandler exposes every implemented CLI operation as a versioned JSON API.
 func NewHandler() http.Handler {
+	return newHandler(authenticateSystemUser)
+}
+
+func newHandler(check credentialChecker) http.Handler {
 	mux := http.NewServeMux()
+	sessions := newSessionStore(check)
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
-	mux.HandleFunc("POST /api/v1/init", initDockflow)
-	mux.HandleFunc("/api/v1/namespaces", namespaces)
-	mux.HandleFunc("/api/v1/namespaces/", namespaceResource)
-	mux.HandleFunc("/api/v1/repositories", repositories)
-	mux.HandleFunc("/api/v1/repositories/", repositoryResource)
-	mux.HandleFunc("GET /api/v1/openapi.json", serveOpenAPI)
+	mux.HandleFunc("POST /api/v1/auth/login", sessions.login)
+	mux.HandleFunc("POST /api/v1/auth/logout", sessions.logout)
+	mux.HandleFunc("GET /api/v1/auth/session", func(w http.ResponseWriter, r *http.Request) {
+		if username, ok := sessions.current(r); ok {
+			writeJSON(w, http.StatusOK, map[string]string{"username": username})
+			return
+		}
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "请先登录"})
+	})
+	protected := http.NewServeMux()
+	protected.HandleFunc("POST /api/v1/init", initDockflow)
+	protected.HandleFunc("/api/v1/namespaces", namespaces)
+	protected.HandleFunc("/api/v1/namespaces/", namespaceResource)
+	protected.HandleFunc("/api/v1/repositories", repositories)
+	protected.HandleFunc("/api/v1/repositories/", repositoryResource)
+	protected.HandleFunc("GET /api/v1/openapi.json", serveOpenAPI)
+	mux.Handle("/api/", sessions.require(protected))
 	mux.Handle("/", spaHandler())
 	return recoverer(mux)
 }

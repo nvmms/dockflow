@@ -20,10 +20,37 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func authenticatedTestHandler(t *testing.T) http.Handler {
+	t.Helper()
+	handler := newHandler(func(username, password string) error { return nil })
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"username":"tester","password":"secret"}`))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("login status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	cookies := recorder.Result().Cookies()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, cookie := range cookies {
+			r.AddCookie(cookie)
+		}
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func TestProtectedAPIRequiresLogin(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/namespaces", nil)
+	w := httptest.NewRecorder()
+	newHandler(func(_, _ string) error { return nil }).ServeHTTP(w, r)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+}
+
 func TestOpenAPIIsValidJSON(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/openapi.json", nil)
 	w := httptest.NewRecorder()
-	NewHandler().ServeHTTP(w, r)
+	authenticatedTestHandler(t).ServeHTTP(w, r)
 	var spec map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &spec); err != nil {
 		t.Fatal(err)
@@ -37,7 +64,7 @@ func TestCreateNamespaceValidation(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/namespaces", strings.NewReader(`{"name":"","unknown":true}`))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	NewHandler().ServeHTTP(w, r)
+	authenticatedTestHandler(t).ServeHTTP(w, r)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
@@ -46,7 +73,7 @@ func TestCreateNamespaceValidation(t *testing.T) {
 func TestRepositoryProviderValidation(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/repositories/bitbucket", strings.NewReader(`{"name":"me","token":"secret"}`))
 	w := httptest.NewRecorder()
-	NewHandler().ServeHTTP(w, r)
+	authenticatedTestHandler(t).ServeHTTP(w, r)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
@@ -55,7 +82,7 @@ func TestRepositoryProviderValidation(t *testing.T) {
 func TestMethodNotAllowed(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPatch, "/api/v1/namespaces", nil)
 	w := httptest.NewRecorder()
-	NewHandler().ServeHTTP(w, r)
+	authenticatedTestHandler(t).ServeHTTP(w, r)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -67,7 +94,7 @@ func TestMethodNotAllowed(t *testing.T) {
 func TestListAppDeploymentJobsRoute(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/namespaces/gb/apps/gb.api/deploy/jobs", nil)
 	w := httptest.NewRecorder()
-	NewHandler().ServeHTTP(w, r)
+	authenticatedTestHandler(t).ServeHTTP(w, r)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}

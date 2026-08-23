@@ -1,9 +1,13 @@
 {
   "openapi": "3.1.0",
-  "info": {"title": "DockFlow Web API", "version": "1.0.0", "description": "HTTP interface for all implemented DockFlow CLI capabilities. No authentication is built in; bind to a trusted network or place behind an authenticated reverse proxy."},
+  "info": {"title": "DockFlow Web API", "version": "1.0.0", "description": "HTTP interface for DockFlow. Management endpoints require a Linux PAM-authenticated session."},
   "servers": [{"url": "http://localhost:8090"}],
+  "security": [{"cookieAuth": []}],
   "paths": {
-    "/api/v1/health": {"get": {"summary": "API health", "responses": {"200": {"description": "Healthy"}}}},
+    "/api/v1/health": {"get": {"summary": "API health", "security": [], "responses": {"200": {"description": "Healthy"}}}},
+    "/api/v1/auth/login": {"post": {"summary": "Log in with Linux system credentials", "security": [], "responses": {"200": {"description": "Authenticated"}, "401": {"$ref": "#/components/responses/Error"}}}},
+    "/api/v1/auth/session": {"get": {"summary": "Get current session", "security": [], "responses": {"200": {"description": "Current Linux user"}, "401": {"$ref": "#/components/responses/Error"}}}},
+    "/api/v1/auth/logout": {"post": {"summary": "End current session", "responses": {"204": {"description": "Logged out"}}}},
     "/api/v1/init": {"post": {"summary": "Initialize DockFlow", "responses": {"200": {"description": "Ready"}}}},
     "/api/v1/namespaces": {
       "get": {"summary": "List namespaces", "responses": {"200": {"description": "Namespace list", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/Namespace"}}}}}}},
@@ -38,6 +42,7 @@
     "/api/v1/openapi.json": {"get": {"summary": "OpenAPI document", "responses": {"200": {"description": "OpenAPI 3.1 JSON"}}}}
   },
   "components": {
+    "securitySchemes": {"cookieAuth": {"type": "apiKey", "in": "cookie", "name": "dockflow_session"}},
     "parameters": {"Namespace": {"name": "namespace", "in": "path", "required": true, "schema": {"type": "string"}}, "Name": {"name": "name", "in": "path", "required": true, "schema": {"type": "string"}}},
     "responses": {"Error": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}},
     "requestBodies": {"Repository": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["name", "token"], "properties": {"name": {"type": "string"}, "token": {"type": "string", "writeOnly": true}, "url": {"type": "string", "description": "Required for GitLab"}}}}}}},
