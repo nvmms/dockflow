@@ -170,6 +170,10 @@ func handleApps(w http.ResponseWriter, r *http.Request, ns string, rest []string
 		writeJSON(w, http.StatusOK, job)
 		return
 	}
+	if len(rest) == 5 && rest[1] == "deploy" && rest[2] == "jobs" && rest[4] == "logs" && r.Method == http.MethodGet {
+		streamDeploymentLogs(w, r, ns, name, rest[3])
+		return
+	}
 	if len(rest) == 4 && rest[1] == "deploy" && rest[2] == "jobs" && r.Method == http.MethodDelete {
 		if err := usecase.DeleteDeploymentJob(ns, name, rest[3]); err != nil {
 			writeError(w, err)
@@ -225,6 +229,10 @@ func handleApps(w http.ResponseWriter, r *http.Request, ns string, rest []string
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"logs": logs})
+		return
+	}
+	if len(rest) == 5 && rest[1] == "deploy" && rest[3] == "logs" && rest[4] == "stream" && r.Method == http.MethodGet {
+		streamContainerLogs(w, r, func(tail string) (io.ReadCloser, error) { return usecase.OpenAppRuntimeLogs(ns, name, rest[2], tail) })
 		return
 	}
 	if len(rest) == 2 && rest[1] == "deploy" && r.Method == http.MethodPost {
@@ -324,6 +332,10 @@ func handleDatabases(w http.ResponseWriter, r *http.Request, ns string, rest []s
 		return
 	}
 	name := rest[0]
+	if len(rest) == 2 && rest[1] == "logs" && r.Method == http.MethodGet {
+		streamContainerLogs(w, r, func(tail string) (io.ReadCloser, error) { return usecase.OpenDatabaseLogs(ns, name, tail) })
+		return
+	}
 	if len(rest) == 2 && (rest[1] == "start" || rest[1] == "stop") && r.Method == http.MethodPost {
 		if err := usecase.SetDatabaseRunning(ns, name, rest[1] == "start"); err != nil {
 			writeError(w, err)
@@ -440,6 +452,10 @@ func handleRedis(w http.ResponseWriter, r *http.Request, ns string, rest []strin
 		default:
 			methodNotAllowed(w, "GET, POST")
 		}
+		return
+	}
+	if len(rest) == 2 && rest[1] == "logs" && r.Method == http.MethodGet {
+		streamContainerLogs(w, r, func(tail string) (io.ReadCloser, error) { return usecase.OpenRedisLogs(ns, rest[0], tail) })
 		return
 	}
 	if len(rest) == 2 && (rest[1] == "start" || rest[1] == "stop") && r.Method == http.MethodPost {

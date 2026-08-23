@@ -15,9 +15,14 @@
         <el-table-column label="淘汰策略" prop="maxmemory_policy"/>
         <el-table-column label="内网地址"><template #default="{row}">{{row.ip?.join(', ')||'—'}}</template></el-table-column>
         <el-table-column align="right" width="235"><template #default="{row}"><el-button link @click="openEdit(row)">编辑</el-button><el-button v-if="row.status==='running'" link :loading="operating===row.name" @click="setRunning(row,false)">停止</el-button><el-button v-if="row.status==='stopped'" link type="primary" :loading="operating===row.name" @click="setRunning(row,true)">启动</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template></el-table-column>
+        <el-table-column align="right" width="65"><template #default="{row}"><el-button link @click="openLogs(row)">日志</el-button></template></el-table-column>
       </el-table>
     </el-card>
   </section>
+  <el-dialog v-model="logsDialog" :title="`${logsTarget?.name || ''} 实时日志`" width="900px">
+    <div class="log-toolbar"><el-select v-model="logTail" class="tail-select" @change="connectLogs"><el-option label="最近 100 行" value="100"/><el-option label="最近 200 行" value="200"/><el-option label="最近 500 行" value="500"/><el-option label="最近 1000 行" value="1000"/></el-select><el-tag type="success" effect="plain">实时</el-tag></div>
+    <pre class="log-output">{{ logs || '暂无日志，等待新输出…' }}</pre>
+  </el-dialog>
   <el-dialog v-model="editDialog" :title="`编辑 Redis ${editTarget?.name || ''}`" width="520px"><el-form label-position="top"><el-form-item label="自动重启策略"><el-select v-model="editRestartPolicy"><el-option label="除非手动停止（推荐）" value="unless-stopped"/><el-option label="始终自动重启" value="always"/><el-option label="仅失败时重启" value="on-failure"/><el-option label="不自动重启" value="no"/></el-select></el-form-item><el-divider>日志策略</el-divider><el-form-item label="日志驱动"><el-select v-model="editLogDriver"><el-option label="local（推荐）" value="local"/><el-option label="json-file" value="json-file"/><el-option label="阿里云日志服务" value="aliyun-sls"/></el-select></el-form-item><div v-if="editLogDriver!=='aliyun-sls'" class="form-grid"><el-form-item label="单文件上限"><el-input v-model="editLogMaxSize" placeholder="10m"/></el-form-item><el-form-item label="保留文件数"><el-input-number v-model="editLogMaxFile" :min="1" :max="100"/></el-form-item></div><div v-else class="form-grid"><el-form-item label="Endpoint"><el-input v-model="editSLSEndpoint"/></el-form-item><el-form-item label="Project"><el-input v-model="editSLSProject"/></el-form-item><el-form-item label="Logstore"><el-input v-model="editSLSLogstore"/></el-form-item><el-form-item label="采集配置名称"><el-input v-model="editSLSConfigName"/></el-form-item></div><el-form-item label="立即应用"><el-switch v-model="editApplyNow"/><div class="form-hint">只有选择阿里云日志服务的容器会添加 SLS 白名单 Label。旧 Redis 若没有持久化卷会拒绝重建。</div></el-form-item></el-form><template #footer><el-button @click="editDialog=false">取消</el-button><el-button type="primary" :loading="editSaving" @click="saveEdit">保存</el-button></template></el-dialog>
   <el-dialog v-model="dialog" title="创建 Redis" width="600px" destroy-on-close>
     <el-form label-position="top" class="form-grid">
@@ -35,9 +40,10 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, type RedisRecord } from '../api'
+import { openLogStream, type LogStream } from '../logStream'
 
 const props = defineProps<{namespace:string}>()
 const records = ref<RedisRecord[]>([])
@@ -58,6 +64,8 @@ const editSLSLogstore = ref('')
 const editSLSEndpoint = ref('')
 const editSLSConfigName = ref('')
 const form = reactive({name:'',version:'7',password:'',appendonly:true,cpu:.5,memory:.5,maxmemory_policy:'allkeys-lru',restart_policy:'unless-stopped'})
+const logsDialog=ref(false),logsTarget=ref<RedisRecord>(),logs=ref(''),logTail=ref('200')
+let logsStream:LogStream|undefined
 
 async function load(){loading.value=true;try{records.value=await api.get<RedisRecord[]>(`/namespaces/${props.namespace}/redis`)||[]}catch(e){ElMessage.error((e as Error).message)}finally{loading.value=false}}
 function statusText(status?:string){return status==='running'?'运行中':status==='stopped'?'已停止':status==='missing'?'容器不存在':status==='paused'?'已暂停':status==='restarting'?'重启中':'未知'}
@@ -68,5 +76,14 @@ async function saveEdit(){if(!editTarget.value)return;editSaving.value=true;try{
 async function setRunning(row:RedisRecord,running:boolean){operating.value=row.name;try{await api.post(`/namespaces/${props.namespace}/redis/${row.name}/${running?'start':'stop'}`);ElMessage.success(running?'Redis 已启动':'Redis 已停止');await load()}catch(e){ElMessage.error((e as Error).message)}finally{operating.value=''}}
 async function create(){if(!form.name)return ElMessage.warning('请输入实例名称');saving.value=true;try{await api.post(`/namespaces/${props.namespace}/redis`,form);dialog.value=false;ElMessage.success('Redis 已创建');load()}catch(e){ElMessage.error((e as Error).message)}finally{saving.value=false}}
 async function remove(row:RedisRecord){try{await ElMessageBox.confirm(`确定删除 Redis “${row.name}” 吗？`,'删除 Redis',{type:'warning'});await api.delete(`/namespaces/${props.namespace}/redis/${row.name}`);ElMessage.success('Redis 已删除');load()}catch(e){if(e!=='cancel'&&e!=='close')ElMessage.error((e as Error).message)}}
+function openLogs(row:RedisRecord){logsTarget.value=row;logsDialog.value=true;connectLogs()}
+function connectLogs(){if(!logsTarget.value)return;logsStream?.close();logs.value='';logsStream=openLogStream(`/namespaces/${props.namespace}/redis/${logsTarget.value.name}/logs?tail=${logTail.value}`,{onLog:chunk=>{logs.value+=chunk},onError:()=>ElMessage.error('Redis 日志连接已断开')})}
 watch(()=>props.namespace,load,{immediate:true})
+watch(logsDialog,open=>{if(!open){logsStream?.close();logsStream=undefined}})
+onBeforeUnmount(()=>logsStream?.close())
 </script>
+<style scoped>
+.log-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.tail-select { width: 150px; }
+.log-output { min-height: 440px; max-height: 60vh; margin: 0; padding: 16px; overflow: auto; border-radius: 8px; background: #101521; color: #d8e0ee; font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+</style>
