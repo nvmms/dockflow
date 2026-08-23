@@ -39,7 +39,7 @@ static int dockflow_pam_auth(const char *user, const char *password) {
     if (!start || !auth || !account || !end) { dlclose(lib); return -1; }
     struct pam_conv conv = { dockflow_conv, (void *)password };
     pam_handle_t *handle = NULL;
-    int status = start("login", user, &conv, &handle);
+	int status = start("dockflow", user, &conv, &handle);
     if (status == 0) status = auth(handle, 0);
     if (status == 0) status = account(handle, 0);
     if (handle) end(handle, status);

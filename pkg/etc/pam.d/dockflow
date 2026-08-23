@@ -1,0 +1,8 @@
+#%PAM-1.0
+
+# Authenticate against the local Linux account database.
+@include common-auth
+
+# Only explicitly approved accounts may use the DockFlow web console.
+account required pam_succeed_if.so quiet user ingroup dockflow-login
+@include common-account

@@ -42,13 +42,13 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ruby-dev
+          sudo apt-get install -y ruby-dev gcc libc6-dev
           sudo gem install --no-document fpm
 
       # 构建 Go 项目
       - name: Build Go binary
         run: |
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build \
             -ldflags="-X main.Version=${{ steps.version.outputs.VERSION }}" \
             -o ./pkg/usr/bin/dockflow \
             ./cmd/dockflow
@@ -64,6 +64,8 @@ jobs:
             --deb-compression xz \
             --deb-user root \
             --deb-group root \
+            --depends libpam0g \
+            --depends libpam-modules \
             --after-install debian/postinst \
             -C pkg \
             usr etc

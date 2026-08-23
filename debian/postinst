@@ -5,6 +5,7 @@ case "$1" in
   configure)
     # 创建系统组
     getent group dockflow >/dev/null 2>&1 || groupadd -r dockflow
+    getent group dockflow-login >/dev/null 2>&1 || groupadd -r dockflow-login
 
     # 数据目录
     mkdir -p /var/lib/dockflow
@@ -33,6 +34,9 @@ case "$1" in
     echo "  3) Allow your user to access DockFlow data:"
     echo "     sudo usermod -aG dockflow <your-username>"
     echo "     (log out and log back in to apply group changes)"
+    echo ""
+    echo "  4) Allow a Linux account to log in to the DockFlow web console:"
+    echo "     sudo usermod -aG dockflow-login <your-username>"
     echo ""
     ;;
 esac
