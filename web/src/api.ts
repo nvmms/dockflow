@@ -35,6 +35,7 @@ export interface AppRecord {
   name: string
   cpu: number
   memory: number
+  restart_policy?: 'unless-stopped' | 'always' | 'on-failure' | 'no'
   repo: string
   trigger: { type: 'branch' | 'tag'; rule: string }
   env: Array<{ key: string; value: string }>
@@ -69,6 +70,7 @@ export interface DatabaseRecord {
   container_id: string
   ip: string[]
   remote: boolean
+  restart_policy?: 'unless-stopped' | 'always' | 'on-failure' | 'no'
   status?: 'running' | 'stopped' | 'missing' | 'paused' | 'restarting' | 'importing'
   import_error?: string
 }
@@ -83,4 +85,5 @@ export interface RedisRecord {
   container_id: string
   ip: string[]
   status?: 'running' | 'stopped' | 'missing' | 'paused' | 'restarting'
+  restart_policy?: 'unless-stopped' | 'always' | 'on-failure' | 'no'
 }

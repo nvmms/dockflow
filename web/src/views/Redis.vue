@@ -26,6 +26,7 @@
       <el-form-item label="CPU (Core)"><el-input-number v-model="form.cpu" :min="0.1" :step="0.5"/></el-form-item>
       <el-form-item label="内存 (GB)"><el-input-number v-model="form.memory" :min="0.1" :step="0.5"/></el-form-item>
       <el-form-item label="内存淘汰策略" class="form-span"><el-select v-model="form.maxmemory_policy"><el-option label="allkeys-lru" value="allkeys-lru"/><el-option label="allkeys-lfu" value="allkeys-lfu"/><el-option label="volatile-lru" value="volatile-lru"/><el-option label="noeviction" value="noeviction"/></el-select></el-form-item>
+      <el-form-item label="自动重启策略" class="form-span"><el-select v-model="form.restart_policy"><el-option label="除非手动停止（推荐）" value="unless-stopped"/><el-option label="始终自动重启" value="always"/><el-option label="仅失败时重启" value="on-failure"/><el-option label="不自动重启" value="no"/></el-select><div class="form-hint">控制容器异常退出或服务器重启后的恢复行为。</div></el-form-item>
     </el-form>
     <template #footer><el-button @click="dialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="create">创建 Redis</el-button></template>
   </el-dialog>
@@ -42,7 +43,7 @@ const loading = ref(false)
 const dialog = ref(false)
 const saving = ref(false)
 const operating = ref('')
-const form = reactive({name:'',version:'7',password:'',appendonly:true,cpu:.5,memory:.5,maxmemory_policy:'allkeys-lru'})
+const form = reactive({name:'',version:'7',password:'',appendonly:true,cpu:.5,memory:.5,maxmemory_policy:'allkeys-lru',restart_policy:'unless-stopped'})
 
 async function load(){loading.value=true;try{records.value=await api.get<RedisRecord[]>(`/namespaces/${props.namespace}/redis`)||[]}catch(e){ElMessage.error((e as Error).message)}finally{loading.value=false}}
 function statusText(status?:string){return status==='running'?'运行中':status==='stopped'?'已停止':status==='missing'?'容器不存在':status==='paused'?'已暂停':status==='restarting'?'重启中':'未知'}

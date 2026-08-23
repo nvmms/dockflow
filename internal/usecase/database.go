@@ -76,7 +76,12 @@ func Createdatabase(database domain.DatabaseSpec) error {
 
 	containerName := docker.ResourceContainerName(database.Namespace, name, database.Name)
 	opts := docker.NewRunOptions(containerName, databaseImageName)
-	opts.WithRestart(container.RestartPolicyOnFailure)
+	restartPolicy, err := normalizeRestartPolicy(database.RestartPolicy)
+	if err != nil {
+		return err
+	}
+	database.RestartPolicy = string(restartPolicy)
+	opts.WithRestart(restartPolicy)
 	opts.WithNetwork(ns.Network)
 	opts.WithCpu(database.CPU)
 	opts.WithMemory(database.Memory)
@@ -107,6 +112,21 @@ func Createdatabase(database domain.DatabaseSpec) error {
 	ns.Save()
 
 	return nil
+}
+
+func normalizeRestartPolicy(value string) (container.RestartPolicyMode, error) {
+	switch value {
+	case "", string(container.RestartPolicyUnlessStopped):
+		return container.RestartPolicyUnlessStopped, nil
+	case string(container.RestartPolicyAlways):
+		return container.RestartPolicyAlways, nil
+	case string(container.RestartPolicyOnFailure):
+		return container.RestartPolicyOnFailure, nil
+	case string(container.RestartPolicyDisabled):
+		return container.RestartPolicyDisabled, nil
+	default:
+		return "", fmt.Errorf("invalid restart policy")
+	}
 }
 
 func Listdatabase(namespaceName string) ([]domain.DatabaseSpec, error) {

@@ -34,6 +34,12 @@ func CreateRedis(redis domain.RedisSpec) error {
 
 	containerName := docker.ResourceContainerName(redis.Namespace, "redis", redis.Name)
 	opts := docker.NewRunOptions(containerName, redisImageName)
+	restartPolicy, err := normalizeRestartPolicy(redis.RestartPolicy)
+	if err != nil {
+		return err
+	}
+	redis.RestartPolicy = string(restartPolicy)
+	opts.WithRestart(restartPolicy)
 
 	opts.WithNetwork(ns.Network)
 	opts.WithCpu(redis.CPU)

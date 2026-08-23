@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/docker/docker/api/types/container"
 )
 
 var (
@@ -251,6 +253,11 @@ func (d *AppDeployer) runApp(image, version string) (string, error) {
 
 	// ---------- run options ----------
 	opts := docker.NewRunOptions(containerName, image)
+	restartPolicy := container.RestartPolicyUnlessStopped
+	if d.app.RestartPolicy != "" {
+		restartPolicy = container.RestartPolicyMode(d.app.RestartPolicy)
+	}
+	opts.WithRestart(restartPolicy)
 
 	opts.WithCpu(d.app.CPU)
 	opts.WithMemory(float64(d.app.Memory))

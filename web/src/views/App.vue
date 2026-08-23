@@ -22,6 +22,7 @@
       <el-form-item label="触发规则" required><el-input v-model="form.trigger.rule" placeholder="main" /></el-form-item>
       <el-form-item label="CPU (Core)"><el-input-number v-model="form.cpu" :min="0.1" :step="0.5" /></el-form-item>
       <el-form-item label="内存 (GB)"><el-input-number v-model="form.memory" :min="1" /></el-form-item>
+      <el-form-item label="自动重启策略" class="form-span"><el-select v-model="form.restart_policy"><el-option label="除非手动停止（推荐）" value="unless-stopped"/><el-option label="始终自动重启" value="always"/><el-option label="仅失败时重启" value="on-failure"/><el-option label="不自动重启" value="no"/></el-select><div class="form-hint">应用下次部署的新容器将使用该策略。</div></el-form-item>
       <el-divider>环境变量</el-divider>
       <div class="env-list form-span">
         <div v-for="(env, index) in form.env" :key="index" class="env-row">
@@ -54,12 +55,12 @@ const props = defineProps<{ namespace: string }>()
 defineEmits<{ 'view-deployments': [app: string] }>()
 const records=ref<AppRecord[]>([]), loading=ref(false), search=ref(''), dialog=ref(false), editing=ref(false), saving=ref(false)
 const batchEnvDialog=ref(false), batchEnvText=ref('')
-const makeForm=()=>({name:'',repo:'',token:'',cpu:1,memory:1,trigger:{type:'branch' as 'branch'|'tag',rule:'main'},env:[] as Array<{key:string;value:string}>,url:[{host:'',port:'8080'}]})
+const makeForm=()=>({name:'',repo:'',token:'',cpu:1,memory:1,restart_policy:'unless-stopped' as 'unless-stopped'|'always'|'on-failure'|'no',trigger:{type:'branch' as 'branch'|'tag',rule:'main'},env:[] as Array<{key:string;value:string}>,url:[{host:'',port:'8080'}]})
 const form=reactive(makeForm())
 const filtered=computed(()=>records.value.filter(v=>`${v.name} ${v.repo}`.toLowerCase().includes(search.value.toLowerCase())))
 async function load(){loading.value=true;try{records.value=await api.get<AppRecord[]>(`/namespaces/${props.namespace}/apps`)||[]}catch(e){ElMessage.error((e as Error).message)}finally{loading.value=false}}
 function openCreate(){editing.value=false;Object.assign(form,makeForm());dialog.value=true}
-function openEdit(row:AppRecord){editing.value=true;Object.assign(form,{...makeForm(),name:row.name,repo:row.repo,cpu:row.cpu,memory:row.memory,trigger:{...row.trigger},env:(row.env||[]).map(env=>({...env})),url:(row.url||[]).map(url=>({...url}))});dialog.value=true}
+function openEdit(row:AppRecord){editing.value=true;Object.assign(form,{...makeForm(),name:row.name,repo:row.repo,cpu:row.cpu,memory:row.memory,restart_policy:row.restart_policy||'unless-stopped',trigger:{...row.trigger},env:(row.env||[]).map(env=>({...env})),url:(row.url||[]).map(url=>({...url}))});dialog.value=true}
 function addEnv(){form.env.push({key:'',value:''})}
 function removeEnv(index:number){form.env.splice(index,1)}
 function openBatchEnv(){batchEnvText.value=form.env.filter(env=>env.key.trim()).map(env=>`${env.key}=${env.value}`).join('\n');batchEnvDialog.value=true}

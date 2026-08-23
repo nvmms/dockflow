@@ -275,6 +275,9 @@ func handleDatabases(w http.ResponseWriter, r *http.Request, ns string, rest []s
 			if in.DbType == "" {
 				in.DbType = "mysql:5.7"
 			}
+			if in.RestartPolicy == "" {
+				in.RestartPolicy = "unless-stopped"
+			}
 			if in.Name == "" || in.Username == "" || in.Password == "" || in.DbName == "" {
 				writeBadRequest(w, "name, username, password and dbname are required")
 				return
@@ -341,18 +344,19 @@ func handleRedis(w http.ResponseWriter, r *http.Request, ns string, rest []strin
 			writeJSON(w, 200, v)
 		case http.MethodPost:
 			var body struct {
-				Name     string  `json:"name"`
-				Version  string  `json:"version"`
-				CPU      float64 `json:"cpu"`
-				Memory   float64 `json:"memory"`
-				Password string  `json:"password"`
-				AOF      *bool   `json:"appendonly"`
-				Eviction string  `json:"maxmemory_policy"`
+				Name          string  `json:"name"`
+				Version       string  `json:"version"`
+				CPU           float64 `json:"cpu"`
+				Memory        float64 `json:"memory"`
+				Password      string  `json:"password"`
+				AOF           *bool   `json:"appendonly"`
+				Eviction      string  `json:"maxmemory_policy"`
+				RestartPolicy string  `json:"restart_policy"`
 			}
 			if err := decodeJSON(w, r, &body); err != nil {
 				return
 			}
-			in := domain.RedisSpec{Name: body.Name, Namespace: ns, Version: body.Version, CPU: body.CPU, Memory: body.Memory, Password: body.Password, Eviction: body.Eviction, AOF: true}
+			in := domain.RedisSpec{Name: body.Name, Namespace: ns, Version: body.Version, CPU: body.CPU, Memory: body.Memory, Password: body.Password, Eviction: body.Eviction, RestartPolicy: body.RestartPolicy, AOF: true}
 			if body.AOF != nil {
 				in.AOF = *body.AOF
 			}
@@ -371,6 +375,9 @@ func handleRedis(w http.ResponseWriter, r *http.Request, ns string, rest []strin
 			}
 			if in.Eviction == "" {
 				in.Eviction = "allkeys-lru"
+			}
+			if in.RestartPolicy == "" {
+				in.RestartPolicy = "unless-stopped"
 			}
 			if err := usecase.CreateRedis(in); err != nil {
 				writeError(w, err)
