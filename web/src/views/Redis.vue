@@ -9,14 +9,16 @@
       <el-table :data="records" v-loading="loading" empty-text="当前命名空间还没有 Redis 实例">
         <el-table-column label="实例"><template #default="{row}"><div class="primary-cell"><span class="resource-avatar redis-avatar">R</span><div><strong>{{row.name}}</strong><small>Redis {{row.version}}</small></div></div></template></el-table-column>
         <el-table-column label="状态" width="120"><template #default="{row}"><el-tag :type="statusTag(row.status)" effect="plain">{{statusText(row.status)}}</el-tag></template></el-table-column>
+        <el-table-column label="重启策略" width="150"><template #default="{row}">{{restartPolicyText(row.restart_policy)}}</template></el-table-column>
         <el-table-column label="持久化" width="140"><template #default="{row}"><el-tag :type="row.appendonly?'success':'info'" effect="plain">AOF {{row.appendonly?'已开启':'已关闭'}}</el-tag></template></el-table-column>
         <el-table-column label="规格" width="140"><template #default="{row}">{{row.cpu}} Core · {{row.memory}} GB</template></el-table-column>
         <el-table-column label="淘汰策略" prop="maxmemory_policy"/>
         <el-table-column label="内网地址"><template #default="{row}">{{row.ip?.join(', ')||'—'}}</template></el-table-column>
-        <el-table-column align="right" width="190"><template #default="{row}"><el-button v-if="row.status==='running'" link :loading="operating===row.name" @click="setRunning(row,false)">停止</el-button><el-button v-if="row.status==='stopped'" link type="primary" :loading="operating===row.name" @click="setRunning(row,true)">启动</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template></el-table-column>
+        <el-table-column align="right" width="235"><template #default="{row}"><el-button link @click="openEdit(row)">编辑</el-button><el-button v-if="row.status==='running'" link :loading="operating===row.name" @click="setRunning(row,false)">停止</el-button><el-button v-if="row.status==='stopped'" link type="primary" :loading="operating===row.name" @click="setRunning(row,true)">启动</el-button><el-button link type="danger" @click="remove(row)">删除</el-button></template></el-table-column>
       </el-table>
     </el-card>
   </section>
+  <el-dialog v-model="editDialog" :title="`编辑 Redis ${editTarget?.name || ''}`" width="480px"><el-form label-position="top"><el-form-item label="自动重启策略"><el-select v-model="editRestartPolicy"><el-option label="除非手动停止（推荐）" value="unless-stopped"/><el-option label="始终自动重启" value="always"/><el-option label="仅失败时重启" value="on-failure"/><el-option label="不自动重启" value="no"/></el-select></el-form-item></el-form><template #footer><el-button @click="editDialog=false">取消</el-button><el-button type="primary" :loading="editSaving" @click="saveEdit">保存</el-button></template></el-dialog>
   <el-dialog v-model="dialog" title="创建 Redis" width="600px" destroy-on-close>
     <el-form label-position="top" class="form-grid">
       <el-form-item label="实例名称" required><el-input v-model="form.name" placeholder="session-cache"/></el-form-item>
@@ -43,11 +45,18 @@ const loading = ref(false)
 const dialog = ref(false)
 const saving = ref(false)
 const operating = ref('')
+const editDialog = ref(false)
+const editSaving = ref(false)
+const editTarget = ref<RedisRecord>()
+const editRestartPolicy = ref('unless-stopped')
 const form = reactive({name:'',version:'7',password:'',appendonly:true,cpu:.5,memory:.5,maxmemory_policy:'allkeys-lru',restart_policy:'unless-stopped'})
 
 async function load(){loading.value=true;try{records.value=await api.get<RedisRecord[]>(`/namespaces/${props.namespace}/redis`)||[]}catch(e){ElMessage.error((e as Error).message)}finally{loading.value=false}}
 function statusText(status?:string){return status==='running'?'运行中':status==='stopped'?'已停止':status==='missing'?'容器不存在':status==='paused'?'已暂停':status==='restarting'?'重启中':'未知'}
 function statusTag(status?:string){return status==='running'?'success':status==='restarting'?'warning':status==='missing'?'danger':'info'}
+function restartPolicyText(value?:string){return value==='always'?'始终重启':value==='on-failure'?'失败时重启':value==='no'?'不自动重启':'除非手动停止'}
+function openEdit(row:RedisRecord){editTarget.value=row;editRestartPolicy.value=row.restart_policy||'unless-stopped';editDialog.value=true}
+async function saveEdit(){if(!editTarget.value)return;editSaving.value=true;try{await api.put(`/namespaces/${props.namespace}/redis/${editTarget.value.name}`,{restart_policy:editRestartPolicy.value});editDialog.value=false;ElMessage.success('Redis 配置已更新');await load()}catch(e){ElMessage.error((e as Error).message)}finally{editSaving.value=false}}
 async function setRunning(row:RedisRecord,running:boolean){operating.value=row.name;try{await api.post(`/namespaces/${props.namespace}/redis/${row.name}/${running?'start':'stop'}`);ElMessage.success(running?'Redis 已启动':'Redis 已停止');await load()}catch(e){ElMessage.error((e as Error).message)}finally{operating.value=''}}
 async function create(){if(!form.name)return ElMessage.warning('请输入实例名称');saving.value=true;try{await api.post(`/namespaces/${props.namespace}/redis`,form);dialog.value=false;ElMessage.success('Redis 已创建');load()}catch(e){ElMessage.error((e as Error).message)}finally{saving.value=false}}
 async function remove(row:RedisRecord){try{await ElMessageBox.confirm(`确定删除 Redis “${row.name}” 吗？`,'删除 Redis',{type:'warning'});await api.delete(`/namespaces/${props.namespace}/redis/${row.name}`);ElMessage.success('Redis 已删除');load()}catch(e){if(e!=='cancel'&&e!=='close')ElMessage.error((e as Error).message)}}

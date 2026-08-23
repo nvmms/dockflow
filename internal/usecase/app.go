@@ -170,6 +170,20 @@ func UpdateApp(nsName, appName string, updated domain.AppSpec) error {
 		return err
 	}
 	updated.RestartPolicy = string(restartPolicy)
+	if updated.RestartPolicy != current.RestartPolicy {
+		for _, deployment := range current.Deploy {
+			containerID, err := docker.HasContainer(deployment.ContainerId)
+			if err != nil {
+				return err
+			}
+			if containerID == "" {
+				continue
+			}
+			if err := docker.UpdateContainerRestartPolicy(containerID, restartPolicy); err != nil {
+				return fmt.Errorf("update restart policy for container %s: %w", containerID[:12], err)
+			}
+		}
+	}
 	for _, env := range updated.Envs {
 		if env.Key == "" {
 			return fmt.Errorf("env key is empty")

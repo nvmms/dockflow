@@ -301,6 +301,20 @@ func handleDatabases(w http.ResponseWriter, r *http.Request, ns string, rest []s
 		writeJSON(w, http.StatusOK, map[string]string{"status": rest[1] + "ed"})
 		return
 	}
+	if len(rest) == 1 && r.Method == http.MethodPut {
+		var in struct {
+			RestartPolicy string `json:"restart_policy"`
+		}
+		if err := decodeJSON(w, r, &in); err != nil {
+			return
+		}
+		if err := usecase.UpdateDatabaseRestartPolicy(ns, name, in.RestartPolicy); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"restart_policy": in.RestartPolicy})
+		return
+	}
 	if len(rest) == 1 && r.Method == http.MethodDelete {
 		if err := usecase.Removedatabase(ns, name); err != nil {
 			writeError(w, err)
@@ -395,6 +409,20 @@ func handleRedis(w http.ResponseWriter, r *http.Request, ns string, rest []strin
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": rest[1] + "ed"})
+		return
+	}
+	if len(rest) == 1 && r.Method == http.MethodPut {
+		var in struct {
+			RestartPolicy string `json:"restart_policy"`
+		}
+		if err := decodeJSON(w, r, &in); err != nil {
+			return
+		}
+		if err := usecase.UpdateRedisRestartPolicy(ns, rest[0], in.RestartPolicy); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"restart_policy": in.RestartPolicy})
 		return
 	}
 	if len(rest) == 1 && r.Method == http.MethodDelete {

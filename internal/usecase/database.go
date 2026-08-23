@@ -140,12 +140,15 @@ func Listdatabase(namespaceName string) ([]domain.DatabaseSpec, error) {
 
 	result := append([]domain.DatabaseSpec(nil), ns.Database...)
 	for i := range result {
-		status, ips, err := containerRuntimeStatus(result[i].ContainerId)
+		status, ips, restartPolicy, err := containerRuntimeStatus(result[i].ContainerId)
 		if err != nil {
 			return nil, err
 		}
 		result[i].Status = status
 		result[i].Ip = ips
+		if restartPolicy != "" {
+			result[i].RestartPolicy = restartPolicy
+		}
 		importState := getDatabaseImportStatus(namespaceName, result[i].Name)
 		if importState.Status == "importing" && status == "running" {
 			result[i].Status = "importing"
@@ -164,6 +167,36 @@ func SetDatabaseRunning(namespaceName, name string, running bool) error {
 		return err
 	}
 	return setContainerRunning(database.ContainerId, running)
+}
+
+func UpdateDatabaseRestartPolicy(namespaceName, name, value string) error {
+	policy, err := normalizeRestartPolicy(value)
+	if err != nil {
+		return err
+	}
+	ns, err := domain.NewNamespace(namespaceName)
+	if err != nil {
+		return err
+	}
+	if ns == nil {
+		return ErrNamespaceNotFound
+	}
+	_, index, found := lo.FindIndexOf(ns.Database, func(item domain.DatabaseSpec) bool { return item.Name == name })
+	if !found {
+		return ErrdatabaseNotExist
+	}
+	containerID, err := docker.HasContainer(ns.Database[index].ContainerId)
+	if err != nil {
+		return err
+	}
+	if containerID == "" {
+		return fmt.Errorf("container not found")
+	}
+	if err := docker.UpdateContainerRestartPolicy(containerID, policy); err != nil {
+		return err
+	}
+	ns.Database[index].RestartPolicy = string(policy)
+	return ns.Save()
 }
 
 func Removedatabase(namespaceName string, databaseContainerName string) error {

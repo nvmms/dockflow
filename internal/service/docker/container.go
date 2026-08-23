@@ -87,6 +87,17 @@ func RestartContainer(id string, timeoutSec *int) error {
 	)
 }
 
+// UpdateContainerRestartPolicy changes the policy of an existing container.
+// Docker applies this immediately; restarting the container is not required.
+func UpdateContainerRestartPolicy(id string, mode container.RestartPolicyMode) error {
+	_, err := Client().ContainerUpdate(
+		Ctx(),
+		id,
+		container.UpdateConfig{RestartPolicy: container.RestartPolicy{Name: mode}},
+	)
+	return err
+}
+
 // RemoveContainer 删除容器
 func RemoveContainer(id string, force bool) error {
 	return Client().ContainerRemove(

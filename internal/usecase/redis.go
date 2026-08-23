@@ -93,12 +93,15 @@ func ListRedis(namespaceName string) ([]domain.RedisSpec, error) {
 
 	result := append([]domain.RedisSpec(nil), ns.Redis...)
 	for i := range result {
-		status, ips, err := containerRuntimeStatus(result[i].ContainerId)
+		status, ips, restartPolicy, err := containerRuntimeStatus(result[i].ContainerId)
 		if err != nil {
 			return nil, err
 		}
 		result[i].Status = status
 		result[i].Ip = ips
+		if restartPolicy != "" {
+			result[i].RestartPolicy = restartPolicy
+		}
 	}
 	return result, nil
 }
@@ -118,17 +121,47 @@ func SetRedisRunning(namespaceName, name string, running bool) error {
 	return setContainerRunning(redis.ContainerId, running)
 }
 
-func containerRuntimeStatus(containerID string) (string, []string, error) {
+func UpdateRedisRestartPolicy(namespaceName, name, value string) error {
+	policy, err := normalizeRestartPolicy(value)
+	if err != nil {
+		return err
+	}
+	ns, err := domain.NewNamespace(namespaceName)
+	if err != nil {
+		return err
+	}
+	if ns == nil {
+		return ErrNamespaceNotFound
+	}
+	redis, index := findRedisByName(ns, name)
+	if redis == nil {
+		return ErrRedisNotExist
+	}
+	containerID, err := docker.HasContainer(redis.ContainerId)
+	if err != nil {
+		return err
+	}
+	if containerID == "" {
+		return fmt.Errorf("container not found")
+	}
+	if err := docker.UpdateContainerRestartPolicy(containerID, policy); err != nil {
+		return err
+	}
+	ns.Redis[index].RestartPolicy = string(policy)
+	return ns.Save()
+}
+
+func containerRuntimeStatus(containerID string) (string, []string, string, error) {
 	existingID, err := docker.HasContainer(containerID)
 	if err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
 	if existingID == "" {
-		return "missing", nil, nil
+		return "missing", nil, "", nil
 	}
 	inspect, err := docker.InspectContainer(existingID)
 	if err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
 	status := "stopped"
 	if inspect.State != nil {
@@ -146,7 +179,11 @@ func containerRuntimeStatus(containerID string) (string, []string, error) {
 			}
 		}
 	}
-	return status, ips, nil
+	restartPolicy := ""
+	if inspect.HostConfig != nil {
+		restartPolicy = string(inspect.HostConfig.RestartPolicy.Name)
+	}
+	return status, ips, restartPolicy, nil
 }
 
 func setContainerRunning(containerID string, running bool) error {

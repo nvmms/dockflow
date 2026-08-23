@@ -22,7 +22,7 @@
       <el-form-item label="触发规则" required><el-input v-model="form.trigger.rule" placeholder="main" /></el-form-item>
       <el-form-item label="CPU (Core)"><el-input-number v-model="form.cpu" :min="0.1" :step="0.5" /></el-form-item>
       <el-form-item label="内存 (GB)"><el-input-number v-model="form.memory" :min="1" /></el-form-item>
-      <el-form-item label="自动重启策略" class="form-span"><el-select v-model="form.restart_policy"><el-option label="除非手动停止（推荐）" value="unless-stopped"/><el-option label="始终自动重启" value="always"/><el-option label="仅失败时重启" value="on-failure"/><el-option label="不自动重启" value="no"/></el-select><div class="form-hint">应用下次部署的新容器将使用该策略。</div></el-form-item>
+      <el-form-item label="自动重启策略" class="form-span"><el-select v-model="form.restart_policy"><el-option label="除非手动停止（推荐）" value="unless-stopped"/><el-option label="始终自动重启" value="always"/><el-option label="仅失败时重启" value="on-failure"/><el-option label="不自动重启" value="no"/></el-select><div class="form-hint">保存后立即应用到现有部署容器，未来部署也会沿用。</div></el-form-item>
       <el-divider>环境变量</el-divider>
       <div class="env-list form-span">
         <div v-for="(env, index) in form.env" :key="index" class="env-row">
