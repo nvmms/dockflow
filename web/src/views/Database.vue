@@ -10,9 +10,14 @@
         <el-table-column label="配置" width="170"><template #default="{row}"><span>{{restartPolicyText(row.restart_policy)}}</span><el-tag v-if="row.needs_recreate" type="warning" size="small" effect="plain" class="config-pending">需重建</el-tag></template></el-table-column>
         <el-table-column label="内网地址"><template #default="{row}">{{row.ip?.join(', ')||'—'}}</template></el-table-column>
         <el-table-column align="right" width="375"><template #default="{row}"><el-button link @click="openEdit(row)">编辑</el-button><el-button v-if="row.status==='running'" link :loading="operating===row.name" @click="setRunning(row,false)">停止</el-button><el-button v-if="row.status==='stopped'" link type="primary" :loading="operating===row.name" @click="setRunning(row,true)">启动</el-button><el-button link :disabled="row.status!=='running'" @click="exportSQL(row)">导出</el-button><el-button link :disabled="row.status!=='running'" @click="chooseImport(row)">导入</el-button><el-button link type="danger" :disabled="row.status==='importing'" @click="remove(row)">删除</el-button></template></el-table-column>
+        <el-table-column align="right" width="65"><template #default="{row}"><el-button link @click="openLogs(row)">日志</el-button></template></el-table-column>
       </el-table><input ref="fileInput" hidden type="file" accept=".sql,application/sql" @change="importSQL" />
     </el-card>
   </section>
+  <el-dialog v-model="logsDialog" :title="`${logsTarget?.name || ''} 实时日志`" width="900px">
+    <div class="log-toolbar"><el-select v-model="logTail" class="tail-select" @change="connectLogs"><el-option label="最近 100 行" value="100"/><el-option label="最近 200 行" value="200"/><el-option label="最近 500 行" value="500"/><el-option label="最近 1000 行" value="1000"/></el-select><el-tag type="success" effect="plain">实时</el-tag></div>
+    <pre class="log-output">{{ logs || '暂无日志，等待新输出…' }}</pre>
+  </el-dialog>
   <el-dialog v-model="editDialog" :title="`编辑数据库 ${editTarget?.name || ''}`" width="520px"><el-form label-position="top"><el-form-item label="自动重启策略"><el-select v-model="editRestartPolicy"><el-option label="除非手动停止（推荐）" value="unless-stopped"/><el-option label="始终自动重启" value="always"/><el-option label="仅失败时重启" value="on-failure"/><el-option label="不自动重启" value="no"/></el-select></el-form-item><el-divider>日志策略</el-divider><el-form-item label="日志驱动"><el-select v-model="editLogDriver"><el-option label="local（推荐）" value="local"/><el-option label="json-file" value="json-file"/><el-option label="阿里云日志服务" value="aliyun-sls"/></el-select></el-form-item><div v-if="editLogDriver!=='aliyun-sls'" class="form-grid"><el-form-item label="单文件上限"><el-input v-model="editLogMaxSize" placeholder="10m"/></el-form-item><el-form-item label="保留文件数"><el-input-number v-model="editLogMaxFile" :min="1" :max="100"/></el-form-item></div><div v-else class="form-grid"><el-form-item label="Endpoint"><el-input v-model="editSLSEndpoint"/></el-form-item><el-form-item label="Project"><el-input v-model="editSLSProject"/></el-form-item><el-form-item label="Logstore"><el-input v-model="editSLSLogstore"/></el-form-item><el-form-item label="采集配置名称"><el-input v-model="editSLSConfigName"/></el-form-item></div><el-form-item label="立即应用"><el-switch v-model="editApplyNow"/><div class="form-hint">关闭时只保存配置并标记“需重建”；开启时会停止并重建容器，数据库卷会保留。</div></el-form-item></el-form><template #footer><el-button @click="editDialog=false">取消</el-button><el-button type="primary" :loading="editSaving" @click="saveEdit">保存</el-button></template></el-dialog>
   <el-dialog v-model="dialog" title="创建数据库" width="620px" destroy-on-close><el-form label-position="top" class="form-grid">
     <el-form-item label="实例名称" required><el-input v-model="form.name" placeholder="main-db"/></el-form-item><el-form-item label="数据库引擎"><el-select v-model="form.dbtype"><el-option label="MySQL 5.7" value="mysql:5.7"/><el-option label="MySQL 8.0" value="mysql:8.0"/><el-option label="PostgreSQL 16" value="postgres:16"/></el-select></el-form-item>
@@ -20,9 +25,11 @@
   </el-form><template #footer><el-button @click="dialog=false">取消</el-button><el-button type="primary" :loading="saving" @click="create">创建数据库</el-button></template></el-dialog>
 </template>
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, ref, watch } from 'vue';import { ElMessage,ElMessageBox } from 'element-plus';import { api,type DatabaseRecord } from '../api'
+import { onBeforeUnmount, reactive, ref, watch } from 'vue';import { ElMessage,ElMessageBox } from 'element-plus';import { api,type DatabaseRecord } from '../api';import { openLogStream,type LogStream } from '../logStream'
 const props=defineProps<{namespace:string}>();const records=ref<DatabaseRecord[]>([]),loading=ref(false),dialog=ref(false),saving=ref(false),fileInput=ref<HTMLInputElement>(),importTarget=ref<DatabaseRecord>(),operating=ref(''),editDialog=ref(false),editSaving=ref(false),editTarget=ref<DatabaseRecord>(),editRestartPolicy=ref('unless-stopped'),editLogDriver=ref('local'),editLogMaxSize=ref('10m'),editLogMaxFile=ref(3),editApplyNow=ref(false),editSLSProject=ref(''),editSLSLogstore=ref(''),editSLSEndpoint=ref(''),editSLSConfigName=ref('');const form=reactive({name:'',dbtype:'mysql:5.7',dbname:'',username:'',password:'',remote:false,cpu:1,memory:2,restart_policy:'unless-stopped'})
 let pollTimer:number|undefined
+const logsDialog=ref(false),logsTarget=ref<DatabaseRecord>(),logs=ref(''),logTail=ref('200')
+let logsStream:LogStream|undefined
 const reportedImportErrors=new Set<string>()
 async function load(){loading.value=true;try{records.value=await api.get<DatabaseRecord[]>(`/namespaces/${props.namespace}/databases`)||[];for(const row of records.value){if(row.import_error){const key=`${row.name}:${row.import_error}`;if(!reportedImportErrors.has(key)){reportedImportErrors.add(key);ElMessage.error(`${row.name} 导入失败：${row.import_error}`)}}}updatePolling()}catch(e){ElMessage.error((e as Error).message)}finally{loading.value=false}}
 function updatePolling(){const importing=records.value.some(row=>row.status==='importing');if(importing&&pollTimer===undefined)pollTimer=window.setInterval(load,2000);if(!importing&&pollTimer!==undefined){window.clearInterval(pollTimer);pollTimer=undefined}}
@@ -37,5 +44,13 @@ function exportSQL(row:DatabaseRecord){window.open(`/api/v1/namespaces/${props.n
 function chooseImport(row:DatabaseRecord){importTarget.value=row;fileInput.value?.click()}
 async function importSQL(event:Event){const input=event.target as HTMLInputElement,file=input.files?.[0];if(!file||!importTarget.value)return;try{const res=await fetch(`/api/v1/namespaces/${props.namespace}/databases/${importTarget.value.name}/import`,{method:'POST',headers:{'Content-Type':'application/sql'},body:file});if(!res.ok)throw new Error((await res.json()).error);ElMessage.success('SQL 上传完成，正在后台导入');await load()}catch(e){ElMessage.error((e as Error).message)}finally{input.value=''}}
 async function remove(row:DatabaseRecord){try{await ElMessageBox.confirm(`确定删除数据库 “${row.name}” 及其数据卷吗？`,'删除数据库',{type:'warning'});await api.delete(`/namespaces/${props.namespace}/databases/${row.name}`);ElMessage.success('数据库已删除');load()}catch(e){if(e!=='cancel'&&e!=='close')ElMessage.error((e as Error).message)}}watch(()=>props.namespace,load,{immediate:true})
-onBeforeUnmount(()=>{if(pollTimer!==undefined)window.clearInterval(pollTimer)})
+function openLogs(row:DatabaseRecord){logsTarget.value=row;logsDialog.value=true;connectLogs()}
+function connectLogs(){if(!logsTarget.value)return;logsStream?.close();logs.value='';logsStream=openLogStream(`/namespaces/${props.namespace}/databases/${logsTarget.value.name}/logs?tail=${logTail.value}`,{onLog:chunk=>{logs.value+=chunk},onError:()=>ElMessage.error('数据库日志连接已断开')})}
+watch(logsDialog,open=>{if(!open){logsStream?.close();logsStream=undefined}})
+onBeforeUnmount(()=>{if(pollTimer!==undefined)window.clearInterval(pollTimer);logsStream?.close()})
 </script>
+<style scoped>
+.log-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.tail-select { width: 150px; }
+.log-output { min-height: 440px; max-height: 60vh; margin: 0; padding: 16px; overflow: auto; border-radius: 8px; background: #101521; color: #d8e0ee; font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+</style>

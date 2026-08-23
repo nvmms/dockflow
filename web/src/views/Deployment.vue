@@ -76,6 +76,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, type AppRecord, type DeploymentJob } from '../api'
+import { openLogStream, type LogStream } from '../logStream'
 
 const props = defineProps<{ namespace: string; app: string }>()
 defineEmits<{ back: [] }>()
@@ -117,6 +118,8 @@ const logTail = ref('200')
 const runtimeLogs = ref('')
 const selected = ref<DeploymentJob>()
 let pollTimer: number | undefined
+let buildLogStream: LogStream | undefined
+let runtimeLogStream: LogStream | undefined
 
 const filtered = computed(() => records.value.filter(job => {
   const matchesStatus = status.value === 'all' || job.status === status.value
@@ -158,15 +161,25 @@ async function deploy() {
   try {
     const job = await api.post<DeploymentJob>(`/namespaces/${props.namespace}/apps/${props.app}/deploy`, { [deployType.value]: deployValue.value.trim(), domain: deployDomain.value.trim(), restart_policy: deployRestartPolicy.value, log_driver: deployLogDriver.value, log_max_size: deployLogMaxSize.value, log_max_file: deployLogMaxFile.value, sls_project: deploySLSProject.value, sls_logstore: deploySLSLogstore.value, sls_endpoint: deploySLSEndpoint.value, sls_config_name: deploySLSConfigName.value })
     deployDialog.value = false
-    selected.value = job
-    buildLogsDialog.value = true
+    openBuildLogs(job)
     await load()
     ElMessage.success('部署任务已进入后台')
   } catch (error) { ElMessage.error((error as Error).message) }
   finally { deploying.value = false }
 }
 function latestContainer(appName: string) { return apps.value.find(app => app.name === appName)?.deploy?.at(-1)?.containerId || '' }
-function openBuildLogs(job: DeploymentJob) { selected.value = job; buildLogsDialog.value = true }
+function openBuildLogs(job: DeploymentJob) {
+  selected.value = job
+  buildLogsDialog.value = true
+  buildLogStream?.close()
+  selected.value.logs = ''
+  let streamedLogs = ''
+  buildLogStream = openLogStream(`/namespaces/${props.namespace}/apps/${props.app}/deploy/jobs/${job.id}/logs`, {
+    onLog: chunk => { streamedLogs += chunk; if (selected.value?.id === job.id) selected.value.logs = streamedLogs },
+    onDone: () => load(),
+    onError: () => ElMessage.error('部署日志连接已断开'),
+  })
+}
 function openEdit(job: DeploymentJob) {
   editTarget.value = job
   editRestartPolicy.value = job.restart_policy || 'unless-stopped'
@@ -208,12 +221,14 @@ async function restartDeployment(job: DeploymentJob) {
 }
 async function loadRuntimeLogs() {
   if (!selected.value || !selectedContainer.value) return
+  runtimeLogStream?.close()
+  runtimeLogs.value = ''
   runtimeLogsLoading.value = true
-  try {
-    const result = await api.get<{ logs: string }>(`/namespaces/${props.namespace}/apps/${selected.value.app}/deploy/${selectedContainer.value}/logs?tail=${logTail.value}`)
-    runtimeLogs.value = result.logs
-  } catch (error) { runtimeLogs.value = ''; ElMessage.error((error as Error).message) }
-  finally { runtimeLogsLoading.value = false }
+  runtimeLogStream = openLogStream(`/namespaces/${props.namespace}/apps/${selected.value.app}/deploy/${selectedContainer.value}/logs/stream?tail=${logTail.value}`, {
+    onLog: chunk => { runtimeLogsLoading.value = false; runtimeLogs.value += chunk },
+    onDone: () => { runtimeLogsLoading.value = false },
+    onError: () => { runtimeLogsLoading.value = false; ElMessage.error('运行日志连接已断开') },
+  })
 }
 async function removeDeployment(job: DeploymentJob) {
   try {
@@ -251,7 +266,9 @@ function formatTime(value: string) {
 }
 function domainURL(domain: string) { return `https://${domain}` }
 watch(() => [props.namespace, props.app], load, { immediate: true })
-onBeforeUnmount(() => { if (pollTimer !== undefined) window.clearInterval(pollTimer) })
+watch(buildLogsDialog, open => { if (!open) { buildLogStream?.close(); buildLogStream = undefined } })
+watch(runtimeLogsDialog, open => { if (!open) { runtimeLogStream?.close(); runtimeLogStream = undefined } })
+onBeforeUnmount(() => { if (pollTimer !== undefined) window.clearInterval(pollTimer); buildLogStream?.close(); runtimeLogStream?.close() })
 </script>
 
 <style scoped>
