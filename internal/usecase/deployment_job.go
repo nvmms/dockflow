@@ -2,10 +2,11 @@ package usecase
 
 import (
 	"crypto/rand"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -16,17 +17,21 @@ import (
 )
 
 type DeploymentJob struct {
-	ID         string     `json:"id"`
-	Namespace  string     `json:"namespace"`
-	App        string     `json:"app"`
-	Status     string     `json:"status"`
-	ContainerID string    `json:"containerId,omitempty"`
-	IP         []string   `json:"ip,omitempty"`
-	Logs       string     `json:"logs"`
-	Error      string     `json:"error,omitempty"`
-	StartedAt  time.Time  `json:"startedAt"`
-	FinishedAt *time.Time `json:"finishedAt,omitempty"`
-	Deleted    bool       `json:"deleted,omitempty"`
+	ID          string     `json:"id"`
+	Namespace   string     `json:"namespace"`
+	App         string     `json:"app"`
+	SourceType  string     `json:"sourceType,omitempty"`
+	SourceRef   string     `json:"sourceRef,omitempty"`
+	Commit      string     `json:"commit,omitempty"`
+	Version     string     `json:"version,omitempty"`
+	Status      string     `json:"status"`
+	ContainerID string     `json:"containerId,omitempty"`
+	IP          []string   `json:"ip,omitempty"`
+	Logs        string     `json:"logs"`
+	Error       string     `json:"error,omitempty"`
+	StartedAt   time.Time  `json:"startedAt"`
+	FinishedAt  *time.Time `json:"finishedAt,omitempty"`
+	Deleted     bool       `json:"deleted,omitempty"`
 }
 
 type deploymentJobState struct {
@@ -87,8 +92,10 @@ func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
 		return DeploymentJob{}, err
 	}
 	id := hex.EncodeToString(idBytes)
+	sourceType, sourceRef := deploymentSource(opt)
 	job := &deploymentJobState{DeploymentJob: DeploymentJob{
 		ID: id, Namespace: opt.Namespace, App: opt.Name,
+		SourceType: sourceType, SourceRef: sourceRef, Commit: opt.Commit,
 		Status: "running", StartedAt: time.Now(),
 	}}
 	deploymentJobs.jobs[id] = job
@@ -126,6 +133,19 @@ func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
 	return job.snapshot(), nil
 }
 
+func deploymentSource(opt DeployAppOptions) (string, string) {
+	if opt.Tag != "" {
+		return "tag", opt.Tag
+	}
+	if opt.Branch != "" {
+		return "branch", opt.Branch
+	}
+	if opt.Commit != "" {
+		return "commit", opt.Commit
+	}
+	return "", ""
+}
+
 func GetDeploymentJob(nsName, appName, id string) (DeploymentJob, error) {
 	if err := ensureDeploymentJobsLoaded(); err != nil {
 		return DeploymentJob{}, err
@@ -159,6 +179,7 @@ func ListDeploymentJobs(nsName, appName string) []DeploymentJob {
 			result = append(result, snapshot)
 		}
 	}
+	sort.Slice(result, func(i, j int) bool { return result[i].StartedAt.After(result[j].StartedAt) })
 	return result
 }
 
@@ -174,6 +195,10 @@ func populateDeploymentContainer(job *deploymentJobState, nsName, appName string
 	deploy := app.Deploy[len(app.Deploy)-1]
 	job.mu.Lock()
 	job.ContainerID = deploy.ContainerId
+	job.Version = deploy.Version
+	if job.Commit == "" {
+		job.Commit = deploy.Version
+	}
 	job.mu.Unlock()
 
 	snapshot := job.snapshot()
@@ -336,14 +361,26 @@ func reconcileAppDeployments(nsName, appName string) {
 	changed := false
 	for _, deploy := range app.Deploy {
 		deploymentJobs.Lock()
-		exists := false
+		var existing *deploymentJobState
 		for _, job := range deploymentJobs.jobs {
 			if job.ContainerID == deploy.ContainerId {
-				exists = true
+				existing = job
 				break
 			}
 		}
-		if !exists {
+		if existing != nil {
+			existing.mu.Lock()
+			if existing.Version == "" {
+				existing.Version = deploy.Version
+				existing.Commit = deploy.Version
+				if existing.SourceType == "" {
+					existing.SourceType = "existing"
+					existing.SourceRef = "历史部署"
+				}
+				changed = true
+			}
+			existing.mu.Unlock()
+		} else {
 			id := "existing-" + deploy.ContainerId
 			if len(id) > 25 {
 				id = id[:25]
@@ -354,6 +391,7 @@ func reconcileAppDeployments(nsName, appName string) {
 			}
 			deploymentJobs.jobs[id] = &deploymentJobState{DeploymentJob: DeploymentJob{
 				ID: id, Namespace: nsName, App: appName, Status: "success",
+				SourceType: "existing", SourceRef: "历史部署", Commit: deploy.Version, Version: deploy.Version,
 				ContainerID: deploy.ContainerId, StartedAt: startedAt,
 			}}
 			changed = true

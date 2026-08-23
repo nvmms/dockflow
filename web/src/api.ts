@@ -46,6 +46,10 @@ export interface DeploymentJob {
   id: string
   namespace: string
   app: string
+  sourceType?: 'branch' | 'tag' | 'commit' | 'existing'
+  sourceRef?: string
+  commit?: string
+  version?: string
   status: 'running' | 'success' | 'failed' | 'stopped'
   containerId?: string
   ip?: string[]

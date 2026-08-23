@@ -6,7 +6,7 @@
     </header>
     <el-card shadow="never" class="resource-card">
       <div class="table-toolbar deploy-toolbar">
-        <el-input v-model="search" placeholder="搜索任务 ID" clearable class="search-input" />
+        <el-input v-model="search" placeholder="搜索分支、版本、Commit 或任务 ID" clearable class="search-input" />
         <el-select v-model="status" class="status-filter">
           <el-option label="全部状态" value="all" />
           <el-option label="运行中" value="running" />
@@ -17,11 +17,10 @@
         <span class="record-count">{{ filtered.length }} 个部署任务</span>
       </div>
       <el-table :data="filtered" v-loading="loading" empty-text="当前命名空间还没有部署任务">
-        <el-table-column label="部署任务" min-width="190"><template #default="{ row }"><div class="primary-cell"><span class="resource-avatar deploy-avatar">D</span><div><strong>{{ row.id.slice(0, 12) }}</strong><small>{{ row.id }}</small></div></div></template></el-table-column>
+        <el-table-column label="部署版本" min-width="255"><template #default="{ row }"><div class="primary-cell"><span class="resource-avatar deploy-avatar">D</span><div class="deployment-identity"><div class="deployment-title"><strong>{{ deploymentTitle(row) }}</strong><el-tag v-if="row.sourceType" size="small" effect="plain" round>{{ sourceTypeText(row.sourceType) }}</el-tag></div><small>{{ deploymentDetail(row) }}</small></div></div></template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="tagType(row.status)" effect="plain">{{ statusText(row.status) }}</el-tag></template></el-table-column>
         <el-table-column label="IP" min-width="150"><template #default="{ row }"><span v-if="row.ip?.length">{{ row.ip.join(', ') }}</span><span v-else class="muted">—</span></template></el-table-column>
-        <el-table-column label="开始时间" width="185"><template #default="{ row }">{{ formatTime(row.startedAt) }}</template></el-table-column>
-        <el-table-column label="耗时" width="110"><template #default="{ row }">{{ duration(row) }}</template></el-table-column>
+        <el-table-column label="创建时间" width="185"><template #default="{ row }">{{ formatTime(row.startedAt) }}</template></el-table-column>
         <el-table-column label="结果" min-width="240"><template #default="{ row }"><span v-if="row.error" class="deployment-error" :title="row.error">{{ row.error }}</span><span v-else class="muted">{{ row.status === 'running' ? '正在执行' : '—' }}</span></template></el-table-column>
         <el-table-column align="right" width="310"><template #default="{ row }"><el-button link @click="openBuildLogs(row)">打包日志</el-button><el-button link :disabled="!row.containerId" @click="openRuntimeLogs(row)">运行日志</el-button><el-button link type="primary" :disabled="!row.containerId || row.status === 'running'" @click="restartDeployment(row)">重启</el-button><el-button link type="danger" :disabled="row.status==='running'" @click="removeDeployment(row)">删除</el-button></template></el-table-column>
       </el-table>
@@ -82,7 +81,8 @@ let pollTimer: number | undefined
 const filtered = computed(() => records.value.filter(job => {
   const matchesStatus = status.value === 'all' || job.status === status.value
   const query = search.value.trim().toLowerCase()
-  return matchesStatus && (!query || job.id.toLowerCase().includes(query))
+  const searchable = [job.id, job.sourceType, job.sourceRef, job.commit, job.version, job.containerId].filter(Boolean).join(' ').toLowerCase()
+  return matchesStatus && (!query || searchable.includes(query))
 }))
 
 async function load() {
@@ -130,7 +130,7 @@ function openRuntimeLogs(job: DeploymentJob) {
 }
 async function restartDeployment(job: DeploymentJob) {
   try {
-    await ElMessageBox.confirm(`确定重启部署 “${job.id.slice(0, 12)}” 的容器吗？`, '重启部署', { type: 'warning' })
+    await ElMessageBox.confirm(`确定重启部署“${deploymentTitle(job)}”的容器吗？`, '重启部署', { type: 'warning' })
     await api.post<DeploymentJob>(`/namespaces/${props.namespace}/apps/${props.app}/deploy/jobs/${job.id}/restart`)
     ElMessage.success('部署已重启')
     await load()
@@ -147,7 +147,7 @@ async function loadRuntimeLogs() {
 }
 async function removeDeployment(job: DeploymentJob) {
   try {
-    await ElMessageBox.confirm(`确定删除部署 “${job.id.slice(0, 12)}” 吗？对应容器、运行日志和 Traefik 路由也会被删除。`, '删除部署', { type: 'warning' })
+    await ElMessageBox.confirm(`确定删除部署“${deploymentTitle(job)}”吗？对应容器、运行日志和 Traefik 路由也会被删除。`, '删除部署', { type: 'warning' })
     await api.delete(`/namespaces/${props.namespace}/apps/${props.app}/deploy/jobs/${job.id}`)
     if (selected.value?.id === job.id) { selected.value = undefined; buildLogsDialog.value = false; runtimeLogsDialog.value = false }
     ElMessage.success('部署记录已删除')
@@ -161,13 +161,24 @@ function updatePolling() {
 }
 function tagType(value?: string) { return value === 'success' ? 'success' : value === 'failed' ? 'danger' : value === 'stopped' ? 'info' : 'warning' }
 function statusText(value?: string) { return value === 'success' ? '成功' : value === 'failed' ? '失败' : value === 'running' ? '运行中' : value === 'stopped' ? '停止' : '未知' }
-function formatTime(value: string) { return new Date(value).toLocaleString() }
-function duration(job: DeploymentJob) {
-  const end = job.finishedAt ? new Date(job.finishedAt).getTime() : Date.now()
-  const seconds = Math.max(0, Math.round((end - new Date(job.startedAt).getTime()) / 1000))
-  return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds / 60)}分 ${seconds % 60}秒`
+function sourceTypeText(value?: string) { return value === 'branch' ? '分支' : value === 'tag' ? '标签' : value === 'commit' ? 'Commit' : '历史' }
+function shortRevision(value?: string) { return value ? value.slice(0, 12) : '' }
+function deploymentTitle(job: DeploymentJob) {
+  if (job.sourceType === 'branch' || job.sourceType === 'tag') return job.sourceRef || job.version || '未知来源'
+  if (job.sourceType === 'commit') return shortRevision(job.sourceRef || job.commit)
+  return job.version ? shortRevision(job.version) : job.sourceRef || `任务 ${job.id.slice(0, 12)}`
 }
-
+function deploymentDetail(job: DeploymentJob) {
+  const revision = shortRevision(job.version || job.commit)
+  const parts = []
+  if (revision && revision !== deploymentTitle(job)) parts.push(`版本 ${revision}`)
+  parts.push(`任务 ${job.id.slice(0, 12)}`)
+  return parts.join(' · ')
+}
+function formatTime(value: string) {
+  const time = new Date(value)
+  return Number.isNaN(time.getTime()) || time.getFullYear() <= 1 ? '—' : time.toLocaleString()
+}
 watch(() => [props.namespace, props.app], load, { immediate: true })
 onBeforeUnmount(() => { if (pollTimer !== undefined) window.clearInterval(pollTimer) })
 </script>
@@ -178,6 +189,9 @@ onBeforeUnmount(() => { if (pollTimer !== undefined) window.clearInterval(pollTi
 .header-actions { display: flex; gap: 10px; }
 .status-filter { width: 140px; }
 .deploy-avatar { color: #25785f; background: #e5f7f0; }
+.deployment-identity { min-width: 0; }
+.deployment-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.deployment-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .deployment-error { display: block; overflow: hidden; color: #c04444; text-overflow: ellipsis; white-space: nowrap; }
 .log-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .log-toolbar .el-button { margin-left: auto; }
