@@ -120,11 +120,30 @@ func Listdatabase(namespaceName string) ([]domain.DatabaseSpec, error) {
 
 	result := append([]domain.DatabaseSpec(nil), ns.Database...)
 	for i := range result {
-		state := getDatabaseImportStatus(namespaceName, result[i].Name)
-		result[i].Status = state.Status
-		result[i].ImportError = state.Error
+		status, ips, err := containerRuntimeStatus(result[i].ContainerId)
+		if err != nil {
+			return nil, err
+		}
+		result[i].Status = status
+		result[i].Ip = ips
+		importState := getDatabaseImportStatus(namespaceName, result[i].Name)
+		if importState.Status == "importing" && status == "running" {
+			result[i].Status = "importing"
+		}
+		result[i].ImportError = importState.Error
 	}
 	return result, nil
+}
+
+func SetDatabaseRunning(namespaceName, name string, running bool) error {
+	if getDatabaseImportStatus(namespaceName, name).Status == "importing" {
+		return fmt.Errorf("database import is running")
+	}
+	database, err := findDatabase(namespaceName, name)
+	if err != nil {
+		return err
+	}
+	return setContainerRunning(database.ContainerId, running)
 }
 
 func Removedatabase(namespaceName string, databaseContainerName string) error {
@@ -395,7 +414,7 @@ func getDatabaseImportStatus(namespace, name string) databaseImportStatus {
 	defer databaseImports.RUnlock()
 	state, found := databaseImports.items[namespace+"/"+name]
 	if !found {
-		return databaseImportStatus{Status: "running"}
+		return databaseImportStatus{}
 	}
 	return state
 }

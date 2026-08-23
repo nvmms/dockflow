@@ -4,6 +4,7 @@ import (
 	"dockflow/internal/domain"
 	"dockflow/internal/service/docker"
 	"errors"
+	"fmt"
 )
 
 var (
@@ -84,7 +85,76 @@ func ListRedis(namespaceName string) ([]domain.RedisSpec, error) {
 		return nil, ErrNamespaceNotFound
 	}
 
-	return ns.Redis, nil
+	result := append([]domain.RedisSpec(nil), ns.Redis...)
+	for i := range result {
+		status, ips, err := containerRuntimeStatus(result[i].ContainerId)
+		if err != nil {
+			return nil, err
+		}
+		result[i].Status = status
+		result[i].Ip = ips
+	}
+	return result, nil
+}
+
+func SetRedisRunning(namespaceName, name string, running bool) error {
+	ns, err := domain.NewNamespace(namespaceName)
+	if err != nil {
+		return err
+	}
+	if ns == nil {
+		return ErrNamespaceNotFound
+	}
+	redis, _ := findRedisByName(ns, name)
+	if redis == nil {
+		return ErrRedisNotExist
+	}
+	return setContainerRunning(redis.ContainerId, running)
+}
+
+func containerRuntimeStatus(containerID string) (string, []string, error) {
+	existingID, err := docker.HasContainer(containerID)
+	if err != nil {
+		return "", nil, err
+	}
+	if existingID == "" {
+		return "missing", nil, nil
+	}
+	inspect, err := docker.InspectContainer(existingID)
+	if err != nil {
+		return "", nil, err
+	}
+	status := "stopped"
+	if inspect.State != nil {
+		if inspect.State.Running {
+			status = "running"
+		} else if inspect.State.Status == "paused" || inspect.State.Status == "restarting" {
+			status = inspect.State.Status
+		}
+	}
+	ips := []string{}
+	if status == "running" && inspect.NetworkSettings != nil {
+		for _, network := range inspect.NetworkSettings.Networks {
+			if network != nil && network.IPAddress != "" {
+				ips = append(ips, network.IPAddress)
+			}
+		}
+	}
+	return status, ips, nil
+}
+
+func setContainerRunning(containerID string, running bool) error {
+	existingID, err := docker.HasContainer(containerID)
+	if err != nil {
+		return err
+	}
+	if existingID == "" {
+		return fmt.Errorf("container not found")
+	}
+	if running {
+		return docker.StartContainer(existingID)
+	}
+	return docker.StopContainer(existingID, nil)
 }
 
 func RemoveRedis(namespaceName string, redisContainerName string) error {
@@ -105,24 +175,19 @@ func RemoveRedis(namespaceName string, redisContainerName string) error {
 	if err != nil {
 		return err
 	}
-	if containerId == "" {
-		return ErrRedisNotExist
-	}
-
-	isRun, err := docker.ContainerRunning(redis.ContainerId)
-	if err != nil {
-		return err
-	}
-	if isRun {
-		err := docker.StopContainer(redis.ContainerId, nil)
+	if containerId != "" {
+		isRun, err := docker.ContainerRunning(redis.ContainerId)
 		if err != nil {
 			return err
 		}
-	}
-
-	err = docker.RemoveContainer(redis.ContainerId, true)
-	if err != nil {
-		return err
+		if isRun {
+			if err := docker.StopContainer(redis.ContainerId, nil); err != nil {
+				return err
+			}
+		}
+		if err := docker.RemoveContainer(redis.ContainerId, true); err != nil {
+			return err
+		}
 	}
 
 	ns.Redis = remove(ns.Redis, index)

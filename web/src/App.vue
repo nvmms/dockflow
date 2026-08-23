@@ -76,12 +76,16 @@ async function loadNamespaces() {
   finally { loadingNamespaces.value = false }
 }
 function loadNamespaceDetail() {
+  const namespace = currentNamespace.value || undefined
+  // Element Plus may emit change while the namespace is restored after a page refresh.
+  // Only leave the deployment page when the user actually selected another namespace.
+  if (route.query.namespace === namespace) return
   if (route.name === 'deployments') backToApps()
   else syncNamespaceRoute()
 }
 function syncNamespaceRoute() {
   const namespace = currentNamespace.value || undefined
-  if (route.query.namespace !== namespace) router.replace({ query: { ...route.query, namespace } })
+  if (route.query.namespace !== namespace) router.replace({ name: route.name || undefined, params: route.params, query: { ...route.query, namespace } })
 }
 function navigateMenu(value: string) { router.push({ name: value, query: { namespace: currentNamespace.value || undefined } }) }
 function openDeployments(app: string) { router.push({ name: 'deployments', params: { app }, query: { namespace: currentNamespace.value } }) }

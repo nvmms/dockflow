@@ -290,6 +290,14 @@ func handleDatabases(w http.ResponseWriter, r *http.Request, ns string, rest []s
 		return
 	}
 	name := rest[0]
+	if len(rest) == 2 && (rest[1] == "start" || rest[1] == "stop") && r.Method == http.MethodPost {
+		if err := usecase.SetDatabaseRunning(ns, name, rest[1] == "start"); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": rest[1] + "ed"})
+		return
+	}
 	if len(rest) == 1 && r.Method == http.MethodDelete {
 		if err := usecase.Removedatabase(ns, name); err != nil {
 			writeError(w, err)
@@ -372,6 +380,14 @@ func handleRedis(w http.ResponseWriter, r *http.Request, ns string, rest []strin
 		default:
 			methodNotAllowed(w, "GET, POST")
 		}
+		return
+	}
+	if len(rest) == 2 && (rest[1] == "start" || rest[1] == "stop") && r.Method == http.MethodPost {
+		if err := usecase.SetRedisRunning(ns, rest[0], rest[1] == "start"); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": rest[1] + "ed"})
 		return
 	}
 	if len(rest) == 1 && r.Method == http.MethodDelete {

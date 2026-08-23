@@ -11,6 +11,7 @@ type RedisSpec struct {
 	Eviction    string   `json:"maxmemory_policy"`
 	ContainerId string   `json:"container_id"`
 	Ip          []string `json:"ip"`
+	Status      string   `json:"status,omitempty"`
 }
 
 func NewRedisSpace(

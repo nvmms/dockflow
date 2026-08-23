@@ -69,7 +69,7 @@ export interface DatabaseRecord {
   container_id: string
   ip: string[]
   remote: boolean
-  status?: 'running' | 'importing'
+  status?: 'running' | 'stopped' | 'missing' | 'paused' | 'restarting' | 'importing'
   import_error?: string
 }
 
@@ -82,4 +82,5 @@ export interface RedisRecord {
   maxmemory_policy: string
   container_id: string
   ip: string[]
+  status?: 'running' | 'stopped' | 'missing' | 'paused' | 'restarting'
 }
