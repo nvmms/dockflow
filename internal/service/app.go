@@ -220,10 +220,23 @@ func (d *AppDeployer) buildApp(version string) (string, error) {
 
 	image := fmt.Sprintf("%s:%s", d.app.Name, version)
 
-	if err := docker.Build(repoPath, image, d.log); err != nil {
+	// Docker build arguments are the portable way to expose application
+	// configuration during image construction. Dockerfiles can consume them
+	// with `ARG KEY` (and optionally promote them with `ENV KEY=$KEY`).
+	buildArgs := appEnvBuildArgs(d.app.Envs)
+	if err := docker.Build(repoPath, image, d.log, buildArgs); err != nil {
 		return "", err
 	}
 	return image, nil
+}
+
+func appEnvBuildArgs(envs []domain.Env) map[string]*string {
+	buildArgs := make(map[string]*string, len(envs))
+	for _, env := range envs {
+		value := env.Value
+		buildArgs[env.Key] = &value
+	}
+	return buildArgs
 }
 
 func collectPorts(urls []domain.AppURL) string {

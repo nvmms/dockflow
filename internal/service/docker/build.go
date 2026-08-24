@@ -70,7 +70,7 @@ func TarBuildContext(dir string) (io.Reader, error) {
 	return buf, nil
 }
 
-func Build(path string, tag string, output io.Writer) error {
+func Build(path string, tag string, output io.Writer, buildArgs map[string]*string) error {
 	if output == nil {
 		output = io.Discard
 	}
@@ -92,7 +92,7 @@ func Build(path string, tag string, output io.Writer) error {
 		Tags:       []string{tag},
 		Dockerfile: "Dockerfile",
 		Remove:     true,
-		// BuildArgs:  args,
+		BuildArgs:  buildArgs,
 	}
 
 	resp, err := Client().ImageBuild(Ctx(), tarReader, opts)
