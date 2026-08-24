@@ -176,7 +176,24 @@ func UpdateApp(nsName, appName string, updated domain.AppSpec) error {
 
 	updated.Namespace = nsName
 	updated.Name = appName
-	updated.Deploy = current.Deploy
+	// Deployments can become stale when their containers are removed outside
+	// DockFlow. Do not let one stale entry prevent an otherwise valid app edit
+	// from saving and regenerating the remaining Traefik configurations.
+	updated.Deploy = make([]domain.AppDeploy, 0, len(current.Deploy))
+	for _, deploy := range current.Deploy {
+		containerID, err := docker.HasContainer(deploy.ContainerId)
+		if err != nil {
+			return err
+		}
+		if containerID == "" {
+			if err := monitor.RemoveAppTraefikConfig(nsName, appName, deploy.Version); err != nil {
+				return err
+			}
+			continue
+		}
+		deploy.ContainerId = containerID
+		updated.Deploy = append(updated.Deploy, deploy)
+	}
 	updated.Secret = current.Secret
 	if updated.Token == "" {
 		updated.Token = current.Token
