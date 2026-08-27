@@ -326,7 +326,10 @@ func RemoveAppDeployment(nsName, appName, containerID string) error {
 		}
 	}
 	if deployIndex == -1 {
-		return fmt.Errorf("deployment container not found")
+		// The deployment may already have been removed from the app when a stale
+		// container reference was reconciled. DELETE remains successful so its
+		// historical deployment job can still be cleaned up.
+		return nil
 	}
 
 	if existingID, err := docker.HasContainer(containerID); err != nil {
