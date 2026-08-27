@@ -241,6 +241,7 @@ func GetAppDeployLogs(nsName, appName, containerID, tail string) (string, error)
 type DeployAppOptions struct {
 	Namespace string
 	Name      string
+	Domain    string
 	Branch    string
 	Commit    string
 	Tag       string

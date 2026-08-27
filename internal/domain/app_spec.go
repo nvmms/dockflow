@@ -23,6 +23,7 @@ type AppDeploy struct {
 	ContainerId   string `json:"containerId"`
 	Version       string `json:"version"`
 	Url           string `json:"url"`
+	Domain        string `json:"domain,omitempty"`
 	RestartPolicy string `json:"restart_policy,omitempty"`
 	LogDriver     string `json:"log_driver,omitempty"`
 	LogMaxSize    string `json:"log_max_size,omitempty"`

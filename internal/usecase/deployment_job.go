@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +28,7 @@ type DeploymentJob struct {
 	Version       string     `json:"version,omitempty"`
 	Status        string     `json:"status"`
 	ContainerID   string     `json:"containerId,omitempty"`
+	Domain        string     `json:"domain,omitempty"`
 	IP            []string   `json:"ip,omitempty"`
 	Logs          string     `json:"logs"`
 	Error         string     `json:"error,omitempty"`
@@ -89,6 +91,20 @@ func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
 	if !found {
 		return DeploymentJob{}, ErrAppNotFound
 	}
+	opt.Domain = strings.TrimSpace(opt.Domain)
+	if opt.Domain == "" {
+		// CLI and webhook deployments created before this field was introduced
+		// keep using the application's first configured access rule.
+		if len(app.URLs) > 0 {
+			opt.Domain = strings.TrimSpace(app.URLs[0].Host)
+		}
+	}
+	if opt.Domain == "" {
+		return DeploymentJob{}, fmt.Errorf("deployment domain is required")
+	}
+	if strings.Contains(opt.Domain, "://") || strings.ContainsAny(opt.Domain, "?#") {
+		return DeploymentJob{}, fmt.Errorf("deployment domain must not include a scheme, query, or fragment")
+	}
 	runtimeConfig, normalized, err := deploymentRuntimeConfig(opt.ContainerEditOptions)
 	if err != nil {
 		return DeploymentJob{}, err
@@ -110,7 +126,7 @@ func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
 	job := &deploymentJobState{DeploymentJob: DeploymentJob{
 		ID: id, Namespace: opt.Namespace, App: opt.Name,
 		SourceType: sourceType, SourceRef: sourceRef, Commit: opt.Commit,
-		Status: "running", StartedAt: time.Now(),
+		Status: "running", StartedAt: time.Now(), Domain: opt.Domain,
 		RestartPolicy: normalized.RestartPolicy, LogDriver: normalized.LogDriver,
 		LogMaxSize: normalized.LogMaxSize, LogMaxFile: normalized.LogMaxFile,
 		SLSProject: normalized.SLSProject, SLSLogstore: normalized.SLSLogstore,
@@ -125,6 +141,7 @@ func StartDeployApp(opt DeployAppOptions) (DeploymentJob, error) {
 		_, _ = fmt.Fprintf(job, "[%s] deployment started\n", time.Now().Format(time.RFC3339))
 		deployer, err := service.NewAppDeployerWithLog(&app, job)
 		if err == nil {
+			runtimeConfig.Domain = opt.Domain
 			deployer.WithRuntimeConfig(runtimeConfig)
 			err = deployer.Deploy(&opt.Branch, &opt.Commit, &opt.Tag)
 		}
@@ -242,6 +259,7 @@ func populateDeploymentContainer(job *deploymentJobState, nsName, appName string
 	job.mu.Lock()
 	job.ContainerID = deploy.ContainerId
 	job.Version = deploy.Version
+	job.Domain = deploy.Domain
 	if job.Commit == "" {
 		job.Commit = deploy.Version
 	}
@@ -516,6 +534,10 @@ func reconcileAppDeployments(nsName, appName string) {
 				}
 				changed = true
 			}
+			if existing.Domain == "" && deploy.Domain != "" {
+				existing.Domain = deploy.Domain
+				changed = true
+			}
 			existing.mu.Unlock()
 		} else {
 			id := "existing-" + deploy.ContainerId
@@ -529,7 +551,7 @@ func reconcileAppDeployments(nsName, appName string) {
 			deploymentJobs.jobs[id] = &deploymentJobState{DeploymentJob: DeploymentJob{
 				ID: id, Namespace: nsName, App: appName, Status: "success",
 				SourceType: "existing", SourceRef: "历史部署", Commit: deploy.Version, Version: deploy.Version,
-				ContainerID: deploy.ContainerId, StartedAt: startedAt,
+				ContainerID: deploy.ContainerId, Domain: deploy.Domain, StartedAt: startedAt,
 			}}
 			changed = true
 		}

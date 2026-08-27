@@ -232,6 +232,7 @@ func handleApps(w http.ResponseWriter, r *http.Request, ns string, rest []string
 			Branch        string `json:"branch"`
 			Commit        string `json:"commit"`
 			Tag           string `json:"tag"`
+			Domain        string `json:"domain"`
 			RestartPolicy string `json:"restart_policy"`
 			LogDriver     string `json:"log_driver"`
 			LogMaxSize    string `json:"log_max_size"`
@@ -244,7 +245,7 @@ func handleApps(w http.ResponseWriter, r *http.Request, ns string, rest []string
 		if err := decodeJSON(w, r, &in); err != nil {
 			return
 		}
-		job, err := usecase.StartDeployApp(usecase.DeployAppOptions{Namespace: ns, Name: name, Branch: in.Branch, Commit: in.Commit, Tag: in.Tag, ContainerEditOptions: usecase.ContainerEditOptions{RestartPolicy: in.RestartPolicy, LogDriver: in.LogDriver, LogMaxSize: in.LogMaxSize, LogMaxFile: in.LogMaxFile, SLSProject: in.SLSProject, SLSLogstore: in.SLSLogstore, SLSEndpoint: in.SLSEndpoint, SLSConfigName: in.SLSConfigName}})
+		job, err := usecase.StartDeployApp(usecase.DeployAppOptions{Namespace: ns, Name: name, Branch: in.Branch, Commit: in.Commit, Tag: in.Tag, Domain: in.Domain, ContainerEditOptions: usecase.ContainerEditOptions{RestartPolicy: in.RestartPolicy, LogDriver: in.LogDriver, LogMaxSize: in.LogMaxSize, LogMaxFile: in.LogMaxFile, SLSProject: in.SLSProject, SLSLogstore: in.SLSLogstore, SLSEndpoint: in.SLSEndpoint, SLSConfigName: in.SLSConfigName}})
 		if err != nil {
 			writeError(w, err)
 			return

@@ -115,7 +115,10 @@ func (m *MonitorContainer) refreshTraefikConfig() error {
 	cfg.Reset()
 
 	for _, url := range m.App.URLs {
-		rule := url.Host
+		rule := m.Deploy.Domain
+		if rule == "" { // Compatibility with deployments created before per-deployment domains.
+			rule = url.Host
+		}
 		if m.Deploy.Version != "latest" {
 			rule += "/" + m.Deploy.Version
 		}

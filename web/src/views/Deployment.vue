@@ -19,6 +19,7 @@
       <el-table :data="filtered" v-loading="loading" empty-text="当前命名空间还没有部署任务">
         <el-table-column label="部署版本" min-width="255"><template #default="{ row }"><div class="primary-cell"><span class="resource-avatar deploy-avatar">D</span><div class="deployment-identity"><div class="deployment-title"><strong>{{ deploymentTitle(row) }}</strong><el-tag v-if="row.sourceType" size="small" effect="plain" round>{{ sourceTypeText(row.sourceType) }}</el-tag><el-tag v-if="row.needs_recreate" type="warning" size="small" effect="plain">需重建</el-tag></div><small>{{ deploymentDetail(row) }}</small></div></div></template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="tagType(row.status)" effect="plain">{{ statusText(row.status) }}</el-tag></template></el-table-column>
+        <el-table-column label="访问域名" min-width="210"><template #default="{ row }"><a v-if="row.domain" class="domain-link" :href="domainURL(row.domain)" target="_blank" rel="noopener noreferrer">{{ row.domain }}</a><span v-else class="muted">—</span></template></el-table-column>
         <el-table-column label="IP" min-width="150"><template #default="{ row }"><span v-if="row.ip?.length">{{ row.ip.join(', ') }}</span><span v-else class="muted">—</span></template></el-table-column>
         <el-table-column label="创建时间" width="185"><template #default="{ row }">{{ formatTime(row.startedAt) }}</template></el-table-column>
         <el-table-column label="结果" min-width="240"><template #default="{ row }"><span v-if="row.error" class="deployment-error" :title="row.error">{{ row.error }}</span><span v-else class="muted">{{ row.status === 'running' ? '正在执行' : '—' }}</span></template></el-table-column>
@@ -31,6 +32,7 @@
     <el-form label-position="top">
       <el-form-item label="部署来源"><el-radio-group v-model="deployType"><el-radio-button value="branch">分支</el-radio-button><el-radio-button value="tag">标签</el-radio-button><el-radio-button value="commit">Commit</el-radio-button></el-radio-group></el-form-item>
       <el-form-item :label="deployType"><el-input v-model="deployValue" :placeholder="deployType === 'branch' ? 'main' : ''" /></el-form-item>
+      <el-form-item label="访问域名" required><el-input v-model="deployDomain" placeholder="app.example.com" /><div class="form-hint">每次部署可填写不同域名，无需包含 http:// 或 https://。</div></el-form-item>
       <el-form-item label="自动重启策略"><el-select v-model="deployRestartPolicy"><el-option label="除非手动停止（推荐）" value="unless-stopped"/><el-option label="始终自动重启" value="always"/><el-option label="仅失败时重启" value="on-failure"/><el-option label="不自动重启" value="no"/></el-select></el-form-item>
       <el-divider>日志策略</el-divider>
       <el-form-item label="日志驱动"><el-select v-model="deployLogDriver"><el-option label="local（推荐）" value="local"/><el-option label="json-file" value="json-file"/><el-option label="阿里云日志服务" value="aliyun-sls"/></el-select></el-form-item>
@@ -86,6 +88,7 @@ const deployDialog = ref(false)
 const deploying = ref(false)
 const deployType = ref('branch')
 const deployValue = ref('main')
+const deployDomain = ref('')
 const deployRestartPolicy = ref('unless-stopped')
 const deployLogDriver = ref('local')
 const deployLogMaxSize = ref('10m')
@@ -118,7 +121,7 @@ let pollTimer: number | undefined
 const filtered = computed(() => records.value.filter(job => {
   const matchesStatus = status.value === 'all' || job.status === status.value
   const query = search.value.trim().toLowerCase()
-  const searchable = [job.id, job.sourceType, job.sourceRef, job.commit, job.version, job.containerId].filter(Boolean).join(' ').toLowerCase()
+  const searchable = [job.id, job.sourceType, job.sourceRef, job.commit, job.version, job.containerId, job.domain].filter(Boolean).join(' ').toLowerCase()
   return matchesStatus && (!query || searchable.includes(query))
 }))
 
@@ -141,6 +144,7 @@ function openDeploy() {
   const current = apps.value.find(item => item.name === props.app)
   deployType.value = current?.trigger?.type || 'branch'
   deployValue.value = current?.trigger?.rule || 'main'
+  deployDomain.value = current?.url?.[0]?.host || ''
   deployRestartPolicy.value = 'unless-stopped'
   deployLogDriver.value = 'local'
   deployLogMaxSize.value = '10m'
@@ -149,9 +153,10 @@ function openDeploy() {
 }
 async function deploy() {
   if (!deployValue.value.trim()) return ElMessage.warning('请输入部署来源')
+  if (!deployDomain.value.trim()) return ElMessage.warning('请输入访问域名')
   deploying.value = true
   try {
-    const job = await api.post<DeploymentJob>(`/namespaces/${props.namespace}/apps/${props.app}/deploy`, { [deployType.value]: deployValue.value.trim(), restart_policy: deployRestartPolicy.value, log_driver: deployLogDriver.value, log_max_size: deployLogMaxSize.value, log_max_file: deployLogMaxFile.value, sls_project: deploySLSProject.value, sls_logstore: deploySLSLogstore.value, sls_endpoint: deploySLSEndpoint.value, sls_config_name: deploySLSConfigName.value })
+    const job = await api.post<DeploymentJob>(`/namespaces/${props.namespace}/apps/${props.app}/deploy`, { [deployType.value]: deployValue.value.trim(), domain: deployDomain.value.trim(), restart_policy: deployRestartPolicy.value, log_driver: deployLogDriver.value, log_max_size: deployLogMaxSize.value, log_max_file: deployLogMaxFile.value, sls_project: deploySLSProject.value, sls_logstore: deploySLSLogstore.value, sls_endpoint: deploySLSEndpoint.value, sls_config_name: deploySLSConfigName.value })
     deployDialog.value = false
     selected.value = job
     buildLogsDialog.value = true
@@ -244,6 +249,7 @@ function formatTime(value: string) {
   const time = new Date(value)
   return Number.isNaN(time.getTime()) || time.getFullYear() <= 1 ? '—' : time.toLocaleString()
 }
+function domainURL(domain: string) { return `https://${domain}` }
 watch(() => [props.namespace, props.app], load, { immediate: true })
 onBeforeUnmount(() => { if (pollTimer !== undefined) window.clearInterval(pollTimer) })
 </script>
@@ -258,6 +264,8 @@ onBeforeUnmount(() => { if (pollTimer !== undefined) window.clearInterval(pollTi
 .deployment-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .deployment-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .deployment-error { display: block; overflow: hidden; color: #c04444; text-overflow: ellipsis; white-space: nowrap; }
+.domain-link { color: var(--el-color-primary); text-decoration: none; }
+.domain-link:hover { text-decoration: underline; }
 .log-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .log-toolbar .el-button { margin-left: auto; }
 .job-id { color: #8b94a5; font-size: 12px; }

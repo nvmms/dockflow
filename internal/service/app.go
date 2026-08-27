@@ -32,6 +32,7 @@ type AppDeployer struct {
 }
 
 type DeploymentRuntimeConfig struct {
+	Domain        string
 	RestartPolicy container.RestartPolicyMode
 	LogConfig     container.LogConfig
 	LogDriver     string
@@ -264,7 +265,7 @@ func (d *AppDeployer) deployVersion(
 	}
 
 	d.app.Deploy = append(d.app.Deploy, domain.AppDeploy{
-		ContainerId: containerId, Version: version, Url: "/" + version,
+		ContainerId: containerId, Version: version, Url: "/" + version, Domain: d.runtime.Domain,
 		RestartPolicy: string(d.runtime.RestartPolicy), LogDriver: d.runtime.LogDriver,
 		LogMaxSize: d.runtime.LogMaxSize, LogMaxFile: d.runtime.LogMaxFile,
 		SLSProject: d.runtime.SLSProject, SLSLogstore: d.runtime.SLSLogstore,

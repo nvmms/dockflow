@@ -39,7 +39,7 @@ export interface AppRecord {
   trigger: { type: 'branch' | 'tag'; rule: string }
   env: Array<{ key: string; value: string }>
   url: Array<{ host: string; port: string }>
-  deploy?: Array<{ containerId: string; version: string; url: string }>
+  deploy?: Array<{ containerId: string; version: string; url: string; domain?: string }>
 }
 
 export interface DeploymentJob {
@@ -52,6 +52,7 @@ export interface DeploymentJob {
   version?: string
   status: 'running' | 'success' | 'failed' | 'stopped'
   containerId?: string
+  domain?: string
   ip?: string[]
   logs: string
   error?: string
